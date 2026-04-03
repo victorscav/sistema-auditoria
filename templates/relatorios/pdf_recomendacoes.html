@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+{% include 'relatorios/pdf_base_styles.html' %}
+<style>@page { size: A4 portrait; }</style>
+</head>
+<body>
+<div class="pdf-header">
+    <div class="meta">Lote: {{ lote_label }}<br>Gerado em: {{ data_geracao }}</div>
+    <h1>Recomendações Técnicas para Saneamento</h1>
+    <div class="subtitle">RPPS Barra Mansa — Achados de Auditoria e Medidas Corretivas</div>
+</div>
+
+{% if not achados %}
+<p style="text-align:center;color:#888;margin-top:20pt;">Nenhum achado registrado para os filtros selecionados.</p>
+{% endif %}
+
+{% for achado in achados %}
+{% ifchanged achado.processo.pk %}
+<div class="section-sub" style="margin-top:8pt">
+    Processo: {{ achado.processo.numero }} — {{ achado.processo.beneficiario.nome }}
+    ({{ achado.processo.get_tipo_beneficio_display }}){% if achado.processo.lote %} · Lote {{ achado.processo.lote.numero }}{% endif %}
+</div>
+{% endifchanged %}
+
+<table style="margin-bottom:4pt">
+    <tr>
+        <th style="width:18%">Classificação</th>
+        <th style="width:42%">Descrição do Achado</th>
+        <th style="width:22%">Normas Aplicáveis</th>
+        <th style="width:18%">Recomendação</th>
+    </tr>
+    <tr>
+        <td class="badge-{{ achado.classificacao|lower }}">{{ achado.get_classificacao_display }}</td>
+        <td>{{ achado.descricao }}</td>
+        <td style="font-size:6.5pt">{{ achado.fundamentacao_combinada }}</td>
+        <td style="font-size:6.5pt">{{ achado.recomendacao }}</td>
+    </tr>
+    {% if achado.impacto_financeiro %}
+    <tr>
+        <td colspan="3" style="font-size:6.5pt;color:#721c24;font-weight:bold">
+            Impacto financeiro estimado: R$ {{ achado.impacto_financeiro }}
+        </td>
+        <td></td>
+    </tr>
+    {% endif %}
+</table>
+{% endfor %}
+
+<p style="font-size:7pt;color:#555;margin-top:10pt;border-top:0.5pt solid #ccc;padding-top:4pt">
+    Total de achados: {{ achados|length }}
+</p>
+</body>
+</html>

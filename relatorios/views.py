@@ -1,0 +1,338 @@
+import io
+from datetime import date
+from django.shortcuts import render
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+
+from processos.models import Processo, Lote, TipoBeneficio
+from analise.models import ConferenciaFolha, ResultadoAnalise, AchadoAuditoria
+from institutos.models import RegraAposentadoria
+
+
+def _fundamentacao_combinada(achado):
+    """
+    Combina normas_aplicaveis do achado com a norma_base da regra municipal
+    ativa do instituto/tipo_beneficio do processo.
+    Retorna a string de fundamentação legal completa para o relatório.
+    """
+    norma = achado.normas_aplicaveis or ''
+    processo = achado.processo
+    if not processo.instituto_id:
+        return norma
+    regra = (
+        RegraAposentadoria.objects
+        .filter(
+            instituto_id=processo.instituto_id,
+            tipo_beneficio=processo.tipo_beneficio,
+            norma_federal=False,
+            ativa=True,
+        )
+        .order_by('-vigente_desde')
+        .first()
+    )
+    if regra:
+        combinada = f'{norma} c/c {regra.norma_base}' if norma else regra.norma_base
+    else:
+        combinada = norma
+    return combinada
+
+
+# ── PDF helper ───────────────────────────────────────────────────────────────
+
+def _render_pdf(template_name, context):
+    """Renderiza template HTML como PDF e retorna bytes."""
+    from xhtml2pdf import pisa
+    html = render_to_string(template_name, context)
+    buf = io.BytesIO()
+    pisa.CreatePDF(io.StringIO(html), dest=buf)
+    return buf.getvalue()
+
+
+def _pdf_response(pdf_bytes, filename):
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
+
+def _lote_filter(request, qs, field='lote_id'):
+    lote_id = request.POST.get('lote') or None
+    if lote_id:
+        qs = qs.filter(**{field: lote_id})
+    return qs, lote_id
+
+
+def _lote_label(lote_id):
+    if not lote_id:
+        return 'Todos os lotes'
+    try:
+        return Lote.objects.get(pk=lote_id).numero
+    except Lote.DoesNotExist:
+        return '—'
+
+
+def _resultado(p):
+    return p.get_resultado_analise() or 'Pendente'
+
+
+def _stats(processos):
+    n_c = sum(1 for p in processos if p.get_resultado_analise() == 'CONFORME')
+    n_r = sum(1 for p in processos if p.get_resultado_analise() == 'RESSALVAS')
+    n_nc = sum(1 for p in processos if p.get_resultado_analise() == 'NAO_CONFORME')
+    n_p = sum(1 for p in processos if p.get_resultado_analise() is None)
+    total = len(processos)
+    perc = round(n_c / total * 100, 1) if total else 0
+    return total, n_c, n_r, n_nc, n_p, perc
+
+
+# ── Index view ────────────────────────────────────────────────────────────────
+
+def index(request):
+    processos = Processo.objects.all()
+    conformes = sum(1 for p in processos if p.get_resultado_analise() == 'CONFORME')
+    ressalvas = sum(1 for p in processos if p.get_resultado_analise() == 'RESSALVAS')
+    nao_conformes = sum(1 for p in processos if p.get_resultado_analise() == 'NAO_CONFORME')
+    pendentes = sum(1 for p in processos if p.get_resultado_analise() is None)
+    divergencias = ConferenciaFolha.objects.exclude(tipo_divergencia='SEM_DIVERGENCIA').count()
+
+    stats = {
+        'total': processos.count(),
+        'conformes': conformes,
+        'ressalvas': ressalvas,
+        'nao_conformes': nao_conformes,
+        'pendentes': pendentes,
+        'divergencias': divergencias,
+    }
+
+    return render(request, 'relatorios/index.html', {
+        'lotes': Lote.objects.all(),
+        'stats': stats,
+    })
+
+
+# ── 1. Planilha Analítica ─────────────────────────────────────────────────────
+
+def relatorio_analitico(request):
+    qs = Processo.objects.select_related(
+        'beneficiario', 'lote', 'instituto',
+        'analiseelegibilidade', 'analisecalculo', 'conferenciafolha', 'dados_beneficio'
+    )
+    qs, lote_id = _lote_filter(request, qs)
+    processos = list(qs)
+    total, n_c, n_r, n_nc, n_p, perc = _stats(processos)
+
+    ctx = {
+        'processos': processos,
+        'lote_label': _lote_label(lote_id),
+        'data_geracao': date.today().strftime('%d/%m/%Y'),
+        'n_conformes': n_c,
+        'n_ressalvas': n_r,
+        'n_nao_conformes': n_nc,
+        'n_pendentes': n_p,
+    }
+    return _pdf_response(_render_pdf('relatorios/pdf_analitico.html', ctx), 'planilha_analitica.pdf')
+
+
+# ── 2. Divergências Financeiras ───────────────────────────────────────────────
+
+def relatorio_divergencias(request):
+    qs = ConferenciaFolha.objects.exclude(
+        tipo_divergencia='SEM_DIVERGENCIA'
+    ).select_related('processo__beneficiario', 'processo__lote', 'auditor')
+    lote_id = request.POST.get('lote') or None
+    if lote_id:
+        qs = qs.filter(processo__lote_id=lote_id)
+
+    divergencias = list(qs)
+    total_impacto = sum(
+        float(f.impacto_financeiro_estimado) for f in divergencias
+        if f.impacto_financeiro_estimado
+    )
+
+    ctx = {
+        'divergencias': divergencias,
+        'total_impacto': round(total_impacto, 2),
+        'lote_label': _lote_label(lote_id),
+        'data_geracao': date.today().strftime('%d/%m/%Y'),
+    }
+    return _pdf_response(_render_pdf('relatorios/pdf_divergencias.html', ctx), 'divergencias_financeiras.pdf')
+
+
+# ── 3. Indicadores de Conformidade ───────────────────────────────────────────
+
+def relatorio_indicadores(request):
+    qs = Processo.objects.select_related('beneficiario', 'lote')
+    qs, lote_id = _lote_filter(request, qs)
+    processos = list(qs)
+    total, n_c, n_r, n_nc, n_p, perc = _stats(processos)
+
+    por_tipo = []
+    for tipo_val, tipo_label in TipoBeneficio.choices:
+        sub = [p for p in processos if p.tipo_beneficio == tipo_val]
+        t = len(sub)
+        if t == 0:
+            continue
+        c = sum(1 for p in sub if p.get_resultado_analise() == 'CONFORME')
+        r = sum(1 for p in sub if p.get_resultado_analise() == 'RESSALVAS')
+        nc = sum(1 for p in sub if p.get_resultado_analise() == 'NAO_CONFORME')
+        pe = sum(1 for p in sub if p.get_resultado_analise() is None)
+        por_tipo.append({
+            'label': tipo_label, 'total': t,
+            'conformes': c, 'ressalvas': r, 'nao_conformes': nc, 'pendentes': pe,
+            'perc': round(c / t * 100, 1),
+        })
+
+    # por lote (só quando exibindo todos)
+    por_lote = []
+    if not lote_id:
+        for lote in Lote.objects.all():
+            sub = [p for p in processos if p.lote_id == lote.pk]
+            t = len(sub)
+            if t == 0:
+                continue
+            c = sum(1 for p in sub if p.get_resultado_analise() == 'CONFORME')
+            r = sum(1 for p in sub if p.get_resultado_analise() == 'RESSALVAS')
+            nc = sum(1 for p in sub if p.get_resultado_analise() == 'NAO_CONFORME')
+            por_lote.append({
+                'numero': lote.numero, 'total': t,
+                'conformes': c, 'ressalvas': r, 'nao_conformes': nc,
+                'perc': round(c / t * 100, 1),
+            })
+
+    ctx = {
+        'total': total, 'n_conformes': n_c, 'n_ressalvas': n_r,
+        'n_nao_conformes': n_nc, 'n_pendentes': n_p, 'perc_conformidade': perc,
+        'por_tipo': por_tipo, 'por_lote': por_lote,
+        'lote_label': _lote_label(lote_id),
+        'data_geracao': date.today().strftime('%d/%m/%Y'),
+    }
+    return _pdf_response(_render_pdf('relatorios/pdf_indicadores.html', ctx), 'indicadores_conformidade.pdf')
+
+
+# ── 4. Conferência da Folha de Inativos ──────────────────────────────────────
+
+def relatorio_folha_inativos(request):
+    qs = Processo.objects.select_related(
+        'beneficiario', 'lote', 'instituto',
+        'conferenciafolha', 'dados_beneficio'
+    ).prefetch_related('achados')
+    qs, lote_id = _lote_filter(request, qs)
+
+    rows = []
+    for p in qs:
+        folha = getattr(p, 'conferenciafolha', None)
+        dados = getattr(p, 'dados_beneficio', None)
+        div = folha.divergencia_valor if folha else None
+        recomendacoes = '; '.join(a.recomendacao for a in p.achados.all() if a.recomendacao)
+        rows.append({
+            'obj': p,
+            'folha': folha,
+            'dados': dados,
+            'divergencia_valor': round(float(div), 2) if div is not None else None,
+            'tem_divergencia': div and abs(float(div)) > 0.01,
+            'resultado': _resultado(p),
+            'recomendacoes': recomendacoes,
+        })
+
+    ctx = {
+        'processos': rows,
+        'lote_label': _lote_label(lote_id),
+        'data_geracao': date.today().strftime('%d/%m/%Y'),
+    }
+    return _pdf_response(_render_pdf('relatorios/pdf_folha_inativos.html', ctx), 'conferencia_folha_inativos.pdf')
+
+
+# ── 5. Recomendações Técnicas ─────────────────────────────────────────────────
+
+def relatorio_recomendacoes(request):
+    qs = AchadoAuditoria.objects.select_related(
+        'processo__beneficiario', 'processo__lote', 'processo__instituto'
+    ).order_by('processo__numero', '-data_registro')
+    lote_id = request.POST.get('lote') or None
+    if lote_id:
+        qs = qs.filter(processo__lote_id=lote_id)
+
+    achados = list(qs)
+    for a in achados:
+        a.fundamentacao_combinada = _fundamentacao_combinada(a)
+
+    ctx = {
+        'achados': achados,
+        'lote_label': _lote_label(lote_id),
+        'data_geracao': date.today().strftime('%d/%m/%Y'),
+    }
+    return _pdf_response(_render_pdf('relatorios/pdf_recomendacoes.html', ctx), 'recomendacoes_tecnicas.pdf')
+
+
+# ── 6. Relatório Final Consolidado por Lote ───────────────────────────────────
+
+def relatorio_final_lote(request):
+    lote_id = request.POST.get('lote') or None
+    lote = None
+    if lote_id:
+        try:
+            lote = Lote.objects.get(pk=lote_id)
+        except Lote.DoesNotExist:
+            pass
+
+    qs = Processo.objects.select_related(
+        'beneficiario', 'lote', 'instituto',
+        'analiseelegibilidade', 'analisecalculo', 'conferenciafolha', 'dados_beneficio'
+    ).prefetch_related('achados')
+    if lote:
+        qs = qs.filter(lote=lote)
+
+    processos_raw = list(qs)
+    total, n_c, n_r, n_nc, n_p, perc = _stats(processos_raw)
+
+    # Processos enriquecidos para templates
+    processos = []
+    for p in processos_raw:
+        processos.append({
+            'obj': p,
+            'eleg': getattr(p, 'analiseelegibilidade', None),
+            'calc': getattr(p, 'analisecalculo', None),
+            'folha': getattr(p, 'conferenciafolha', None),
+            'dados': getattr(p, 'dados_beneficio', None),
+            'resultado': _resultado(p),
+        })
+
+    divergencias = [
+        p.conferenciafolha for p in processos_raw
+        if getattr(p, 'conferenciafolha', None) and
+           p.conferenciafolha.tipo_divergencia != 'SEM_DIVERGENCIA'
+    ]
+    total_impacto = round(sum(
+        float(f.impacto_financeiro_estimado) for f in divergencias
+        if f.impacto_financeiro_estimado
+    ), 2)
+
+    achados_qs = AchadoAuditoria.objects.select_related(
+        'processo__beneficiario', 'processo__lote', 'processo__instituto'
+    ).filter(processo__in=processos_raw).order_by('processo__numero')
+    achados = list(achados_qs)
+    for a in achados:
+        a.fundamentacao_combinada = _fundamentacao_combinada(a)
+
+    lote_label = lote.numero if lote else 'Todos os lotes'
+
+    ctx = {
+        'lote': lote,
+        'lote_label': lote_label,
+        'data_geracao': date.today().strftime('%d/%m/%Y'),
+        'total': total,
+        'n_conformes': n_c, 'n_ressalvas': n_r,
+        'n_nao_conformes': n_nc, 'n_pendentes': n_p,
+        'perc_conformidade': perc,
+        'n_divergencias': len(divergencias),
+        'total_impacto': total_impacto,
+        'total_achados': len(achados),
+        'n_achados_nc': sum(1 for a in achados if a.classificacao == 'NAO_CONFORME'),
+        'n_achados_rec': sum(1 for a in achados if a.recomendacao),
+        'processos': processos,
+        'divergencias': divergencias,
+        'achados': list(achados),
+    }
+    fname = f"relatorio_final_{lote_label.replace('/', '-')}.pdf"
+    return _pdf_response(_render_pdf('relatorios/pdf_final_lote.html', ctx), fname)

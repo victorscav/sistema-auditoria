@@ -1,0 +1,869 @@
+{% extends 'base.html' %}
+
+{% block title %}Processo {{ processo.numero }} - Auditoria RPPS{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'processos:lista' %}">Processos</a></li>
+<li class="breadcrumb-item active">{{ processo.numero }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="mb-0 fw-bold">Processo {{ processo.numero }}</h4>
+        <small class="text-muted">{{ processo.get_tipo_beneficio_display }}</small>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'processos:editar' processo.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-pencil me-1"></i>Editar
+        </a>
+        <a href="{% url 'analise:analise' processo.pk %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-clipboard-check me-1"></i>Analisar
+        </a>
+    </div>
+</div>
+
+<!-- ── Alerta de contracheque pendente ──────────────────────────────────── -->
+{% if solicitar_contracheque %}
+<div class="alert alert-warning d-flex align-items-start gap-3 mb-4" id="alerta-contracheque">
+    <i class="bi bi-receipt fs-4 mt-1"></i>
+    <div class="flex-grow-1">
+        <strong>Dados do contracheque não informados.</strong>
+        {% if regime_media %}
+        Para proventos calculados pela <strong>média das contribuições</strong>, informe a parcela
+        de vencimento/salário do contracheque do mês. O reajuste será confrontado com as tabelas do INSS.
+        {% elif regime_paridade %}
+        Para proventos calculados pela <strong>paridade</strong>, informe a última remuneração do
+        cargo efetivo e a lei municipal de reajuste dos servidores em atividade.
+        {% else %}
+        Informe o regime de reajuste nos dados do benefício antes de registrar o contracheque.
+        {% endif %}
+        {% if regime_media or regime_paridade %}
+        <div class="mt-2">
+            <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#modalContracheque">
+                <i class="bi bi-pencil-square me-1"></i>Informar contracheque agora
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<div class="row g-3">
+    <!-- Dados do beneficiário -->
+    <div class="col-lg-6">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-person-badge me-2 text-primary"></i>Beneficiário</h6>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4 text-muted small">Nome</dt>
+                    <dd class="col-sm-8">{{ processo.beneficiario.nome }}</dd>
+                    <dt class="col-sm-4 text-muted small">CPF</dt>
+                    <dd class="col-sm-8">{{ processo.beneficiario.cpf }}</dd>
+                    <dt class="col-sm-4 text-muted small">Matrícula</dt>
+                    <dd class="col-sm-8">{{ processo.beneficiario.matricula|default:"-" }}</dd>
+                    <dt class="col-sm-4 text-muted small">Município</dt>
+                    <dd class="col-sm-8">{{ processo.beneficiario.municipio|default:"-" }}</dd>
+                    <dt class="col-sm-4 text-muted small">Cargo</dt>
+                    <dd class="col-sm-8">{{ processo.beneficiario.cargo|default:"-" }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-file-text me-2 text-primary"></i>Dados do Processo</h6>
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Tipo de Benefício</dt>
+                    <dd class="col-sm-7">{{ processo.get_tipo_beneficio_display }}</dd>
+                    <dt class="col-sm-5 text-muted small">Status</dt>
+                    <dd class="col-sm-7">
+                        <span class="badge badge-{{ processo.status_processo|lower }}">{{ processo.get_status_processo_display }}</span>
+                    </dd>
+                    <dt class="col-sm-5 text-muted small">Data Concessão</dt>
+                    <dd class="col-sm-7">{{ processo.data_concessao|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Data Publicação</dt>
+                    <dd class="col-sm-7">{{ processo.data_publicacao|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Lote</dt>
+                    <dd class="col-sm-7">{{ processo.lote|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Instituto RPPS</dt>
+                    <dd class="col-sm-7">{{ processo.instituto|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Regime de Reajuste</dt>
+                    <dd class="col-sm-7">
+                        {% if regime_paridade %}
+                        <span class="badge bg-primary">Paridade</span>
+                        {% elif regime_media %}
+                        <span class="badge bg-info text-dark">Média / INSS</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Não definido</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+                {% if processo.limitacao_tecnica %}
+                <div class="alert alert-warning mt-3 mb-0 py-2 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <strong>Limitação Técnica:</strong> {{ processo.limitacao_tecnica }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Dados financeiros -->
+    {% if processo.dados_beneficio %}
+    <div class="col-lg-6">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-currency-dollar me-2 text-success"></i>Dados Financeiros</h6>
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Base de Cálculo</dt>
+                    <dd class="col-sm-7">{{ processo.dados_beneficio.base_calculo|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Valor Concedido</dt>
+                    <dd class="col-sm-7 fw-semibold">R$ {{ processo.dados_beneficio.valor_concedido|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Valor Pago/Folha</dt>
+                    <dd class="col-sm-7">R$ {{ processo.dados_beneficio.valor_pago_folha|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Regra Aplicada</dt>
+                    <dd class="col-sm-7">{{ processo.dados_beneficio.regra_aplicada|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Tempo Contribuição</dt>
+                    <dd class="col-sm-7">{{ processo.dados_beneficio.tempo_contribuicao|default:"-" }}</dd>
+                    <dt class="col-sm-5 text-muted small">Idade na Concessão</dt>
+                    <dd class="col-sm-7">{{ processo.dados_beneficio.idade_concessao|default:"-" }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Contracheque ──────────────────────────────────────────────────── -->
+    <div class="col-lg-6">
+        <div class="card card-stat {% if solicitar_contracheque %}border-warning{% endif %}">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-semibold mb-0">
+                        <i class="bi bi-receipt me-2 {% if contracheque %}text-success{% else %}text-warning{% endif %}"></i>
+                        Contracheque
+                        {% if not contracheque %}<span class="badge bg-warning text-dark ms-1">Pendente</span>{% endif %}
+                    </h6>
+                    {% if regime_media or regime_paridade %}
+                    <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalContracheque">
+                        <i class="bi bi-{% if contracheque %}pencil{% else %}plus-lg{% endif %} me-1"></i>
+                        {% if contracheque %}Editar{% else %}Informar{% endif %}
+                    </button>
+                    {% endif %}
+                </div>
+
+                {% if contracheque %}
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Mês Referência</dt>
+                    <dd class="col-sm-7">{{ contracheque.mes_referencia|date:"m/Y" }}</dd>
+
+                    {% if regime_media %}
+                    <dt class="col-sm-5 text-muted small">Vencimento/Salário</dt>
+                    <dd class="col-sm-7 fw-semibold">
+                        {% if contracheque.valor_vencimento %}R$ {{ contracheque.valor_vencimento }}{% else %}—{% endif %}
+                    </dd>
+                    {% endif %}
+
+                    {% if regime_paridade %}
+                    <dt class="col-sm-5 text-muted small">Última Remuneração do Cargo</dt>
+                    <dd class="col-sm-7 fw-semibold">
+                        {% if contracheque.ultima_remuneracao_cargo %}R$ {{ contracheque.ultima_remuneracao_cargo }}{% else %}—{% endif %}
+                    </dd>
+                    <dt class="col-sm-5 text-muted small">Lei de Reajuste Municipal</dt>
+                    <dd class="col-sm-7">{{ contracheque.lei_reajuste_municipal|default:"—" }}</dd>
+                    <dt class="col-sm-5 text-muted small">% Reajuste Lei</dt>
+                    <dd class="col-sm-7">
+                        {% if contracheque.percentual_reajuste_lei %}{{ contracheque.percentual_reajuste_lei }}%{% else %}—{% endif %}
+                    </dd>
+                    <dt class="col-sm-5 text-muted small">Vigência do Reajuste</dt>
+                    <dd class="col-sm-7">{{ contracheque.data_vigencia_reajuste|date:"d/m/Y"|default:"—" }}</dd>
+                    {% endif %}
+
+                    {% if contracheque.observacoes %}
+                    <dt class="col-sm-5 text-muted small">Observações</dt>
+                    <dd class="col-sm-7 small">{{ contracheque.observacoes }}</dd>
+                    {% endif %}
+                </dl>
+
+                {% if regime_media and tabelas_inss %}
+                <hr class="my-2">
+                <small class="text-muted fw-semibold d-block mb-1">Tabela de Reajuste INSS (referência)</small>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0" style="font-size:0.72rem;">
+                        <thead class="table-light">
+                            <tr><th>Ano</th><th>% Acima Mín.</th><th>% Piso</th><th>Salário Mín.</th><th>Teto</th><th>Base Legal</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for t in tabelas_inss|slice:":5" %}
+                            <tr>
+                                <td>{{ t.ano }}</td>
+                                <td>{{ t.percentual_acima_minimo }}%</td>
+                                <td>{{ t.percentual_piso }}%</td>
+                                <td>R$ {{ t.salario_minimo }}</td>
+                                <td>R$ {{ t.teto_inss }}</td>
+                                <td>{{ t.base_legal }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <p class="text-muted small mb-0">
+                    {% if regime_media %}
+                    Informe a parcela de vencimento/salário do contracheque. O reajuste será confrontado com as tabelas do INSS.
+                    {% elif regime_paridade %}
+                    Informe a última remuneração do cargo efetivo e a lei municipal de reajuste dos servidores em atividade.
+                    {% else %}
+                    Defina o regime de reajuste nos dados do benefício para habilitar o registro do contracheque.
+                    {% endif %}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Certidões de Tempo de Contribuição Averbadas ──────────────────── -->
+    <div class="col-12">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-semibold mb-0">
+                        <i class="bi bi-file-earmark-check me-2 text-primary"></i>
+                        Certidões de Tempo de Contribuição Averbadas
+                        <span class="badge bg-secondary ms-1">{{ certidoes|length }}</span>
+                    </h6>
+                    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCertidao">
+                        <i class="bi bi-plus-lg me-1"></i>Adicionar Certidão
+                    </button>
+                </div>
+
+                {% if certidoes %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-2">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Órgão Emissor</th>
+                                <th>Origem</th>
+                                <th>Nº Certidão</th>
+                                <th>Período</th>
+                                <th class="text-center">Tempo Certificado</th>
+                                <th class="text-center">Concomitante</th>
+                                <th class="text-center text-success fw-semibold">Tempo Averbável</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ctc in certidoes %}
+                            <tr>
+                                <td class="small">{{ ctc.orgao_emissor }}</td>
+                                <td class="small">{{ ctc.get_tipo_origem_display }}</td>
+                                <td class="small">{{ ctc.numero_certidao|default:"—" }}</td>
+                                <td class="small text-nowrap">
+                                    {% if ctc.data_inicio_periodo %}{{ ctc.data_inicio_periodo|date:"d/m/Y" }}{% else %}—{% endif %}
+                                    {% if ctc.data_fim_periodo %} a {{ ctc.data_fim_periodo|date:"d/m/Y" }}{% endif %}
+                                </td>
+                                <td class="small text-center">{{ ctc.tempo_certificado_display }}</td>
+                                <td class="small text-center">
+                                    {% if ctc.possui_concomitancia %}
+                                    <span class="text-danger">{{ ctc.tempo_concomitante_display }}</span>
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="small text-center fw-semibold text-success">{{ ctc.tempo_averbavel_display }}</td>
+                                <td>
+                                    <form method="post" action="{% url 'processos:certidoes_tempo' processo.pk %}"
+                                          onsubmit="return confirm('Remover esta certidão?')">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="excluir">
+                                        <input type="hidden" name="ctc_pk" value="{{ ctc.pk }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm py-0">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% if ctc.possui_concomitancia and ctc.descricao_concomitancia %}
+                            <tr class="table-warning">
+                                <td colspan="8" class="small text-muted ps-3">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                    <strong>Concomitância:</strong> {{ ctc.descricao_concomitancia }}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Resumo do tempo averbado total -->
+                <div class="alert alert-success py-2 mb-0 d-flex align-items-center gap-2">
+                    <i class="bi bi-calculator fs-5"></i>
+                    <div>
+                        <strong>Total de tempo averbável:</strong> {{ total_averbado_display }}
+                        <span class="text-muted small ms-2">({{ total_averbado_dias }} dias — certificado menos concomitâncias)</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">
+                    Nenhuma certidão de tempo averbada. Se houver tempo de contribuição ao RGPS/INSS
+                    ou a outro regime próprio, adicione as certidões para que o tempo seja computado
+                    corretamente, descontando eventuais períodos concomitantes com este RPPS.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Contribuições Previdenciárias (Regime MÉDIA) -->
+    {% if regime_media %}
+    <div class="col-12">
+        <div class="card card-stat border-info border-opacity-50">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-semibold mb-0">
+                        <i class="bi bi-table me-2 text-info"></i>Tabela de Contribuições Previdenciárias
+                        <span class="badge bg-info ms-1" style="font-size:0.65rem;">Regime MÉDIA</span>
+                    </h6>
+                    <button class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#modalContribuicao">
+                        <i class="bi bi-plus-lg me-1"></i>Adicionar Competência
+                    </button>
+                </div>
+
+                {% if contribuicoes %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-2" style="font-size:0.82rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Competência</th>
+                                <th class="text-end">Sal. Contribuição (R$)</th>
+                                <th class="text-end">Índice Correção</th>
+                                <th class="text-end">Valor Corrigido (R$)</th>
+                                <th>Obs.</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in contribuicoes %}
+                            <tr>
+                                <td class="fw-semibold">{{ c.competencia|date:"m/Y" }}</td>
+                                <td class="text-end">{{ c.salario_contribuicao }}</td>
+                                <td class="text-end text-muted">{{ c.indice_correcao|default:"—" }}</td>
+                                <td class="text-end {% if c.valor_corrigido %}fw-semibold{% else %}text-muted{% endif %}">
+                                    {% if c.valor_corrigido %}{{ c.valor_corrigido }}{% else %}—{% endif %}
+                                </td>
+                                <td class="text-muted small">{{ c.observacoes|default:"" }}</td>
+                                <td class="text-center">
+                                    <form method="post" action="{% url 'processos:contribuicoes_processo' processo.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="excluir">
+                                        <input type="hidden" name="contrib_pk" value="{{ c.pk }}">
+                                        <button type="submit" class="btn btn-link btn-sm text-danger p-0"
+                                                onclick="return confirm('Remover esta competência?')">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Resumo da média -->
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 text-center bg-light">
+                            <small class="text-muted d-block">Competências registradas</small>
+                            <span class="fw-bold fs-6">{{ contribuicoes|length }}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 text-center">
+                            <small class="text-muted d-block">Média simples</small>
+                            <span class="fw-bold fs-6 text-secondary">
+                                {% if media_simples %}R$ {{ media_simples }}{% else %}—{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 text-center bg-success bg-opacity-10">
+                            <small class="text-muted d-block">Média 80% maiores (Lei 10.887/2004)</small>
+                            <span class="fw-bold fs-6 text-success">
+                                {% if media_80 %}R$ {{ media_80 }}{% else %}—{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-warning py-2 small mb-0">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Nenhuma competência registrada. Adicione o histórico de salários de contribuição
+                    para que o sistema calcule a média e confronte com o valor concedido.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Status de análise -->
+    <div class="col-lg-6">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-clipboard-check me-2 text-primary"></i>Status de Análise</h6>
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="small">Elegibilidade</span>
+                        {% if processo.analiseelegibilidade %}
+                            <span class="badge badge-{{ processo.analiseelegibilidade.resultado|lower }}">{{ processo.analiseelegibilidade.get_resultado_display }}</span>
+                        {% else %}
+                            <span class="badge bg-light text-muted">Pendente</span>
+                        {% endif %}
+                    </div>
+                    <div class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="small">Conformidade de Cálculo</span>
+                        {% if processo.analisecalculo %}
+                            <span class="badge badge-{{ processo.analisecalculo.resultado|lower }}">{{ processo.analisecalculo.get_resultado_display }}</span>
+                        {% else %}
+                            <span class="badge bg-light text-muted">Pendente</span>
+                        {% endif %}
+                    </div>
+                    <div class="list-group-item px-0 d-flex justify-content-between">
+                        <span class="small">Conferência de Folha</span>
+                        {% if processo.conferenciafolha %}
+                            <span class="badge badge-{{ processo.conferenciafolha.resultado|lower }}">{{ processo.conferenciafolha.get_resultado_display }}</span>
+                        {% else %}
+                            <span class="badge bg-light text-muted">Pendente</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'analise:analise' processo.pk %}" class="btn btn-primary w-100 btn-sm">
+                        <i class="bi bi-clipboard-check me-1"></i>Ir para Análise
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Achados -->
+    {% if processo.achados.exists %}
+    <div class="col-12">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-search me-2 text-warning"></i>Achados de Auditoria</h6>
+                {% for achado in processo.achados.all %}
+                <div class="border rounded p-3 mb-2">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="badge badge-{{ achado.classificacao|lower }}">{{ achado.get_classificacao_display }}</span>
+                        <small class="text-muted">{{ achado.data_registro|date:"d/m/Y" }}</small>
+                    </div>
+                    <p class="mb-1 small">{{ achado.descricao }}</p>
+                    {% if achado.recomendacao %}
+                    <small class="text-muted"><strong>Recomendação:</strong> {{ achado.recomendacao }}</small>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if processo.observacoes %}
+    <div class="col-12">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-2">Observações</h6>
+                <p class="mb-0 small">{{ processo.observacoes }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ── Modal Contribuições Previdenciárias ───────────────────────────────── -->
+{% if regime_media %}
+<div class="modal fade" id="modalContribuicao" tabindex="-1" aria-labelledby="modalContribuicaoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalContribuicaoLabel">
+                    <i class="bi bi-table me-2"></i>Registrar Contribuição Previdenciária
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'processos:contribuicoes_processo' processo.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="adicionar">
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Informe a competência e o salário de contribuição. Se disponível, informe o índice
+                        de correção monetária acumulado (INPC) para atualizar o valor à data de concessão.
+                        O campo "Valor Corrigido" será calculado automaticamente.
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Competência <span class="text-danger">*</span></label>
+                            <input type="month" name="competencia" class="form-control" required>
+                            <small class="text-muted">Mês/ano da contribuição</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Salário de Contribuição (R$) <span class="text-danger">*</span></label>
+                            <input type="number" name="salario_contribuicao" class="form-control" step="0.01" min="0" required
+                                   id="contrib_salario" oninput="calcularCorrigido()">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Índice de Correção (INPC acumulado)</label>
+                            <input type="number" name="indice_correcao" class="form-control" step="0.000001" min="0"
+                                   id="contrib_indice" oninput="calcularCorrigido()" placeholder="Ex: 1.352847">
+                            <small class="text-muted">Fator multiplicador acumulado</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Valor Corrigido (R$)</label>
+                            <input type="number" name="valor_corrigido" class="form-control" step="0.01" min="0"
+                                   id="contrib_corrigido" placeholder="Calculado automaticamente">
+                            <small class="text-muted">Deixe em branco para calcular pelo índice</small>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Observações</label>
+                            <input type="text" name="observacoes" class="form-control" placeholder="Ex: Período de licença, cargo diferente, etc.">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-info text-white">
+                        <i class="bi bi-check-lg me-1"></i>Registrar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Modal Certidão de Tempo ───────────────────────────────────────────── -->
+<div class="modal fade" id="modalCertidao" tabindex="-1" aria-labelledby="modalCertidaoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalCertidaoLabel">
+                    <i class="bi bi-file-earmark-check me-2"></i>Adicionar Certidão de Tempo de Contribuição
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'processos:certidoes_tempo' processo.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="adicionar">
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Informe o tempo certificado pelo órgão emissor. Se houve exercício simultâneo com
+                        este RPPS (concomitância), indique o período sobreposto — ele será descontado
+                        automaticamente do tempo averbável.
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Órgão Emissor <span class="text-danger">*</span></label>
+                            <input type="text" name="orgao_emissor" class="form-control" required
+                                   placeholder="Ex: INSS, IPSM-MG, RJU Federal">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tipo de Origem <span class="text-danger">*</span></label>
+                            <select name="tipo_origem" class="form-select">
+                                {% for val, label in origem_choices %}
+                                <option value="{{ val }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Número da Certidão</label>
+                            <input type="text" name="numero_certidao" class="form-control"
+                                   placeholder="Ex: CTC-2024-00012345">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Data de Emissão</label>
+                            <input type="date" name="data_emissao" class="form-control">
+                        </div>
+                        <div class="col-md-4"></div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Início do Período</label>
+                            <input type="date" id="ctc_inicio" name="data_inicio_periodo" class="form-control" onchange="calcularTempoCertidao()">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Fim do Período</label>
+                            <input type="date" id="ctc_fim" name="data_fim_periodo" class="form-control" onchange="calcularTempoCertidao()">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">
+                                Tempo Certificado
+                                <span id="ctc_calc_badge" class="badge bg-info ms-2" style="display:none; font-size:0.7rem;">
+                                    <i class="bi bi-calculator me-1"></i>calculado pelas datas
+                                </span>
+                            </label>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <div class="input-group">
+                                        <input type="number" id="ctc_cert_anos" name="cert_anos" class="form-control" min="0" placeholder="0">
+                                        <span class="input-group-text">anos</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="input-group">
+                                        <input type="number" id="ctc_cert_meses" name="cert_meses" class="form-control" min="0" max="11" placeholder="0">
+                                        <span class="input-group-text">meses</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="input-group">
+                                        <input type="number" id="ctc_cert_dias" name="cert_dias" class="form-control" min="0" max="29" placeholder="0">
+                                        <span class="input-group-text">dias</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <small class="text-muted">Preenchido automaticamente pelas datas do período. Pode ser ajustado manualmente se a certidão indicar valor diferente.</small>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="possui_concomitancia"
+                                       id="chkConcomitancia" onchange="toggleConcomitancia(this)">
+                                <label class="form-check-label fw-semibold text-danger" for="chkConcomitancia">
+                                    Possui período concomitante com este RPPS (a descontar)
+                                </label>
+                            </div>
+                            <small class="text-muted">
+                                Marque se o servidor exerceu vínculo simultâneo com este RPPS durante parte
+                                do período certificado. O tempo sobreposto não será contado duas vezes.
+                            </small>
+                        </div>
+                        <div id="blocoConcomitancia" class="col-12" style="display:none">
+                            <div class="border border-danger rounded p-3 bg-light">
+                                <label class="form-label fw-semibold text-danger">Tempo Concomitante a Descontar</label>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-4">
+                                        <div class="input-group">
+                                            <input type="number" name="conc_anos" class="form-control" min="0" placeholder="0">
+                                            <span class="input-group-text">anos</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="input-group">
+                                            <input type="number" name="conc_meses" class="form-control" min="0" max="11" placeholder="0">
+                                            <span class="input-group-text">meses</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="input-group">
+                                            <input type="number" name="conc_dias" class="form-control" min="0" max="29" placeholder="0">
+                                            <span class="input-group-text">dias</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <label class="form-label fw-semibold">Descrição da Concomitância</label>
+                                <textarea name="descricao_concomitancia" class="form-control" rows="2"
+                                          placeholder="Ex: Período de 01/01/2005 a 31/12/2008 — servidor exercia vínculo simultâneo como Agente Administrativo neste RPPS."></textarea>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Observações</label>
+                            <textarea name="observacoes" class="form-control" rows="2"
+                                      placeholder="Observações sobre a certidão, pendências documentais, etc."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Certidão
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function toggleConcomitancia(chk) {
+    document.getElementById('blocoConcomitancia').style.display = chk.checked ? 'block' : 'none';
+}
+
+function calcularCorrigido() {
+    const salario = parseFloat(document.getElementById('contrib_salario')?.value || 0);
+    const indice  = parseFloat(document.getElementById('contrib_indice')?.value || 0);
+    const campo   = document.getElementById('contrib_corrigido');
+    if (!campo) return;
+    if (salario > 0 && indice > 0) {
+        campo.value = (salario * indice).toFixed(2);
+    } else {
+        campo.value = '';
+    }
+}
+
+function calcularTempoCertidao() {
+    const inicio = document.getElementById('ctc_inicio').value;
+    const fim    = document.getElementById('ctc_fim').value;
+    if (!inicio || !fim) return;
+
+    const d1 = new Date(inicio);
+    const d2 = new Date(fim);
+    if (isNaN(d1) || isNaN(d2) || d2 < d1) return;
+
+    // total de dias inclusive
+    const totalDias = Math.round((d2 - d1) / 86400000) + 1;
+
+    const anos  = Math.floor(totalDias / 365);
+    const resto = totalDias - (anos * 365);
+    const meses = Math.floor(resto / 30);
+    const dias  = resto - (meses * 30);
+
+    document.getElementById('ctc_cert_anos').value  = anos;
+    document.getElementById('ctc_cert_meses').value = meses;
+    document.getElementById('ctc_cert_dias').value  = dias;
+    document.getElementById('ctc_calc_badge').style.display = '';
+}
+</script>
+
+<!-- ── Modal Contracheque ────────────────────────────────────────────────── -->
+{% if regime_media or regime_paridade %}
+<div class="modal fade" id="modalContracheque" tabindex="-1" aria-labelledby="modalContrachequeLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalContrachequeLabel">
+                    <i class="bi bi-receipt me-2"></i>
+                    Dados do Contracheque —
+                    {% if regime_media %}Regime Média (INSS){% else %}Regime Paridade{% endif %}
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'processos:salvar_contracheque' processo.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+
+                    <div class="alert alert-info py-2 small mb-3">
+                        {% if regime_media %}
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Regime MÉDIA:</strong> Informe apenas a parcela de <strong>vencimento/salário básico</strong>
+                        do contracheque do mês. O reajuste será conferido conforme as tabelas do INSS.
+                        {% else %}
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Regime PARIDADE:</strong> Informe a <strong>última remuneração do cargo efetivo paradigma</strong>
+                        e a lei municipal de reajuste dos servidores em atividade no município.
+                        {% endif %}
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Campo comum: mês de referência -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mês de Referência <span class="text-danger">*</span></label>
+                            <input type="month" name="mes_referencia" class="form-control" required
+                                   value="{% if contracheque %}{{ contracheque.mes_referencia|date:'Y-m' }}{% else %}{% now 'Y-m' %}{% endif %}">
+                            <small class="text-muted">Mês/ano do contracheque analisado</small>
+                        </div>
+
+                        {% if regime_media %}
+                        <!-- MÉDIA: só vencimento -->
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Vencimento / Salário Básico (R$)</label>
+                            <input type="number" name="valor_vencimento" class="form-control" step="0.01" min="0"
+                                   value="{% if contracheque %}{{ contracheque.valor_vencimento|default:'' }}{% endif %}"
+                                   placeholder="0,00">
+                            <small class="text-muted">Apenas a parcela vencimento/salário, sem adicionais ou gratificações</small>
+                        </div>
+
+                        {% if tabelas_inss %}
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-muted small">Tabela de Reajuste INSS — referência para confronto</label>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-0" style="font-size:0.73rem;">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Ano</th><th>Vigência</th><th>% Acima do Mín.</th>
+                                            <th>% Piso</th><th>Sal. Mínimo</th><th>Teto INSS</th><th>Base Legal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for t in tabelas_inss %}
+                                        <tr>
+                                            <td class="fw-semibold">{{ t.ano }}</td>
+                                            <td>{{ t.vigencia }}</td>
+                                            <td>{{ t.percentual_acima_minimo }}%</td>
+                                            <td>{{ t.percentual_piso }}%</td>
+                                            <td>R$ {{ t.salario_minimo }}</td>
+                                            <td>R$ {{ t.teto_inss }}</td>
+                                            <td>{{ t.base_legal }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% else %}
+                        <!-- PARIDADE: última remuneração + lei municipal -->
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Última Remuneração do Cargo Efetivo Paradigma (R$)</label>
+                            <input type="number" name="ultima_remuneracao_cargo" class="form-control" step="0.01" min="0"
+                                   value="{% if contracheque %}{{ contracheque.ultima_remuneracao_cargo|default:'' }}{% endif %}"
+                                   placeholder="0,00">
+                            <small class="text-muted">Remuneração atual do servidor ativo no cargo equivalente ao paradigma</small>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Lei Municipal de Reajuste dos Servidores em Atividade</label>
+                            <input type="text" name="lei_reajuste_municipal" class="form-control"
+                                   value="{% if contracheque %}{{ contracheque.lei_reajuste_municipal }}{% endif %}"
+                                   placeholder="Ex: Lei nº 1.234/2025 — reajuste de 5% a partir de 01/03/2025">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">% Reajuste Concedido pela Lei</label>
+                            <div class="input-group">
+                                <input type="number" name="percentual_reajuste_lei" class="form-control" step="0.0001" min="0"
+                                       value="{% if contracheque %}{{ contracheque.percentual_reajuste_lei|default:'' }}{% endif %}"
+                                       placeholder="0,0000">
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Data de Vigência do Reajuste</label>
+                            <input type="date" name="data_vigencia_reajuste" class="form-control"
+                                   value="{% if contracheque %}{{ contracheque.data_vigencia_reajuste|date:'Y-m-d'|default:'' }}{% endif %}">
+                        </div>
+                        {% endif %}
+
+                        <!-- Campo comum: observações -->
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Observações</label>
+                            <textarea name="observacoes" class="form-control" rows="2"
+                                      placeholder="Registro de divergências, limitações documentais, etc.">{% if contracheque %}{{ contracheque.observacoes }}{% endif %}</textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Contracheque
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Auto-abre o modal se contracheque ainda não foi informado -->
+{% if solicitar_contracheque %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modal = new bootstrap.Modal(document.getElementById('modalContracheque'));
+        modal.show();
+    });
+</script>
+{% endif %}
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ acao }} Regra — {{ instituto.nome }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'institutos:lista' %}">Institutos</a></li>
+<li class="breadcrumb-item"><a href="{% url 'institutos:detalhe' instituto.pk %}">{{ instituto.nome }}</a></li>
+<li class="breadcrumb-item active">{{ acao }} Regra</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0">{{ acao }} Regra de Aposentadoria</h4>
+        <small class="text-muted">{{ instituto.nome }}</small>
+    </div>
+    <a href="{% url 'institutos:detalhe' instituto.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Cancelar
+    </a>
+</div>
+
+<div class="card card-stat">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+
+                <!-- Identificação -->
+                <div class="col-12"><h6 class="fw-semibold text-primary border-bottom pb-2">Identificação</h6></div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Tipo de Benefício <span class="text-danger">*</span></label>
+                    <select name="tipo_beneficio" class="form-select" required>
+                        <option value="">Selecione...</option>
+                        {% for val, label in tipo_beneficio_choices %}
+                        <option value="{{ val }}" {% if regra and regra.tipo_beneficio == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold">Norma Base <span class="text-danger">*</span></label>
+                    <input type="text" name="norma_base" class="form-control" required
+                           value="{{ regra.norma_base|default:'' }}" placeholder="EC 103/2019 Art. 20">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Vigente Desde <span class="text-danger">*</span></label>
+                    <input type="date" name="vigente_desde" class="form-control" required
+                           value="{{ regra.vigente_desde|date:'Y-m-d'|default:'' }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Vigente Até</label>
+                    <input type="date" name="vigente_ate" class="form-control"
+                           value="{{ regra.vigente_ate|date:'Y-m-d'|default:'' }}">
+                    <small class="text-muted">Deixe em branco se ainda vigente</small>
+                </div>
+                <div class="col-md-4 d-flex align-items-center pt-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="ativa" id="ativa"
+                               {% if regra == None or regra.ativa %}checked{% endif %}>
+                        <label class="form-check-label" for="ativa">Regra ativa</label>
+                    </div>
+                </div>
+
+                <!-- Elegibilidade -->
+                <div class="col-12 mt-2"><h6 class="fw-semibold text-primary border-bottom pb-2">Elegibilidade</h6></div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Idade Mínima — Homem (anos)</label>
+                    <input type="number" name="idade_minima_homem" class="form-control" min="0" max="100"
+                           value="{{ regra.idade_minima_homem|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Idade Mínima — Mulher (anos)</label>
+                    <input type="number" name="idade_minima_mulher" class="form-control" min="0" max="100"
+                           value="{{ regra.idade_minima_mulher|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Tempo Contribuição — Homem (anos)</label>
+                    <input type="number" name="tempo_contribuicao_homem" class="form-control" min="0"
+                           value="{{ regra.tempo_contribuicao_homem|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Tempo Contribuição — Mulher (anos)</label>
+                    <input type="number" name="tempo_contribuicao_mulher" class="form-control" min="0"
+                           value="{{ regra.tempo_contribuicao_mulher|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Tempo Serviço Público (anos)</label>
+                    <input type="number" name="tempo_servico_publico" class="form-control" min="0"
+                           value="{{ regra.tempo_servico_publico|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Tempo de Carreira (anos)</label>
+                    <input type="number" name="tempo_carreira" class="form-control" min="0"
+                           value="{{ regra.tempo_carreira|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Tempo no Cargo (anos)</label>
+                    <input type="number" name="tempo_no_cargo" class="form-control" min="0"
+                           value="{{ regra.tempo_no_cargo|default:'' }}">
+                </div>
+
+                <!-- Cálculo -->
+                <div class="col-12 mt-2"><h6 class="fw-semibold text-primary border-bottom pb-2">Cálculo</h6></div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Integralidade</label>
+                    <select name="integralidade" class="form-select">
+                        <option value="">Não definido</option>
+                        <option value="true" {% if regra and regra.integralidade == True %}selected{% endif %}>Sim</option>
+                        <option value="false" {% if regra and regra.integralidade == False %}selected{% endif %}>Não</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Fórmula de Proporcionalidade</label>
+                    <input type="text" name="proporcionalidade_formula" class="form-control"
+                           value="{{ regra.proporcionalidade_formula|default:'' }}" placeholder="Ex: TC/35 * última remuneração">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Teto Remuneratório (R$)</label>
+                    <input type="number" name="teto_remuneratorio" class="form-control" step="0.01" min="0"
+                           value="{{ regra.teto_remuneratorio|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Critério de Reajuste</label>
+                    <input type="text" name="criterio_reajuste" class="form-control"
+                           value="{{ regra.criterio_reajuste|default:'' }}" placeholder="INPC / IPCA / IGPDI">
+                </div>
+
+                <!-- Pensão por morte -->
+                <div class="col-12 mt-2"><h6 class="fw-semibold text-primary border-bottom pb-2">Pensão por Morte</h6></div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Cota Inicial (%)</label>
+                    <input type="number" name="cota_inicial_percentual" class="form-control" step="0.01" min="0" max="100"
+                           value="{{ regra.cota_inicial_percentual|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Cota por Dependente (%)</label>
+                    <input type="number" name="cota_por_dependente_percentual" class="form-control" step="0.01" min="0" max="100"
+                           value="{{ regra.cota_por_dependente_percentual|default:'' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Reversibilidade</label>
+                    <select name="reversibilidade" class="form-select">
+                        <option value="">Não definido</option>
+                        <option value="true" {% if regra and regra.reversibilidade == True %}selected{% endif %}>Sim</option>
+                        <option value="false" {% if regra and regra.reversibilidade == False %}selected{% endif %}>Não</option>
+                    </select>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Observações</label>
+                    <textarea name="observacoes" class="form-control" rows="3">{{ regra.observacoes|default:'' }}</textarea>
+                </div>
+
+                <div class="col-12 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Regra
+                    </button>
+                    <a href="{% url 'institutos:detalhe' instituto.pk %}" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

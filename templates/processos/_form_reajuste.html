@@ -1,0 +1,42 @@
+<div class="row g-2">
+    <div class="col-6">
+        <label class="form-label form-label-sm fw-semibold">Ano *</label>
+        <input type="number" name="ano" class="form-control form-control-sm" required min="2000" max="2100">
+    </div>
+    <div class="col-6">
+        <label class="form-label form-label-sm fw-semibold">Vigência *</label>
+        <input type="date" name="vigencia" class="form-control form-control-sm" required>
+    </div>
+    <div class="col-6">
+        <label class="form-label form-label-sm fw-semibold">% Acima do Mínimo *</label>
+        <div class="input-group input-group-sm">
+            <input type="number" name="percentual_acima_minimo" class="form-control form-control-sm" step="0.01" required>
+            <span class="input-group-text">%</span>
+        </div>
+    </div>
+    <div class="col-6">
+        <label class="form-label form-label-sm fw-semibold">% Benefícios no Piso *</label>
+        <div class="input-group input-group-sm">
+            <input type="number" name="percentual_piso" class="form-control form-control-sm" step="0.01" required>
+            <span class="input-group-text">%</span>
+        </div>
+    </div>
+    <div class="col-6">
+        <label class="form-label form-label-sm fw-semibold">Salário Mínimo (R$) *</label>
+        <div class="input-group input-group-sm">
+            <span class="input-group-text">R$</span>
+            <input type="number" name="salario_minimo" class="form-control form-control-sm" step="0.01" required>
+        </div>
+    </div>
+    <div class="col-6">
+        <label class="form-label form-label-sm fw-semibold">Teto INSS (R$) *</label>
+        <div class="input-group input-group-sm">
+            <span class="input-group-text">R$</span>
+            <input type="number" name="teto_inss" class="form-control form-control-sm" step="0.01" required>
+        </div>
+    </div>
+    <div class="col-12">
+        <label class="form-label form-label-sm fw-semibold">Base Legal</label>
+        <input type="text" name="base_legal" class="form-control form-control-sm" placeholder="Ex: Portaria MPS nº 000/0000">
+    </div>
+</div>

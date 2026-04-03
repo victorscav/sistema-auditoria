@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+{% include 'relatorios/pdf_base_styles.html' %}
+<style>
+    @page { size: A4 portrait; }
+    .stat-grid { width: 100%; margin-bottom: 10pt; }
+    .stat-cell { width: 16%; text-align: center; padding: 6pt; border: 1pt solid #ddd; background: #F8F9FA; }
+    .stat-cell .num { font-size: 18pt; font-weight: bold; color: #1A3A5C; }
+    .stat-cell .lbl { font-size: 7pt; color: #555; }
+</style>
+</head>
+<body>
+<div class="pdf-header">
+    <div class="meta">Lote: {{ lote_label }}<br>Gerado em: {{ data_geracao }}</div>
+    <h1>Indicadores Estatísticos de Conformidade</h1>
+    <div class="subtitle">RPPS Barra Mansa — Auditoria de Conformidade Previdenciária</div>
+</div>
+
+<div class="section-title">Resumo Geral</div>
+<table class="stat-grid">
+    <tr>
+        <td class="stat-cell"><div class="num">{{ total }}</div><div class="lbl">Total</div></td>
+        <td class="stat-cell"><div class="num" style="color:#155724">{{ n_conformes }}</div><div class="lbl">Conformes</div></td>
+        <td class="stat-cell"><div class="num" style="color:#856404">{{ n_ressalvas }}</div><div class="lbl">Com Ressalvas</div></td>
+        <td class="stat-cell"><div class="num" style="color:#721c24">{{ n_nao_conformes }}</div><div class="lbl">Não Conformes</div></td>
+        <td class="stat-cell"><div class="num" style="color:#555">{{ n_pendentes }}</div><div class="lbl">Pendentes</div></td>
+        <td class="stat-cell"><div class="num" style="color:#1A3A5C">{{ perc_conformidade }}%</div><div class="lbl">% Conformidade</div></td>
+    </tr>
+</table>
+
+<div class="section-title">Por Tipo de Benefício</div>
+<table>
+    <thead>
+        <tr>
+            <th style="width:35%">Tipo de Benefício</th>
+            <th style="text-align:center">Total</th>
+            <th style="text-align:center">Conformes</th>
+            <th style="text-align:center">Com Ressalvas</th>
+            <th style="text-align:center">Não Conformes</th>
+            <th style="text-align:center">Pendentes</th>
+            <th style="text-align:center">% Conformidade</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in por_tipo %}
+        <tr class="{% cycle 'odd' 'even' %}">
+            <td>{{ row.label }}</td>
+            <td style="text-align:center">{{ row.total }}</td>
+            <td style="text-align:center" class="ok">{{ row.conformes }}</td>
+            <td style="text-align:center" class="warn">{{ row.ressalvas }}</td>
+            <td style="text-align:center" class="nok">{{ row.nao_conformes }}</td>
+            <td style="text-align:center">{{ row.pendentes }}</td>
+            <td style="text-align:center;font-weight:bold">{{ row.perc }}%</td>
+        </tr>
+        {% endfor %}
+        <tr class="total">
+            <td><b>TOTAL GERAL</b></td>
+            <td style="text-align:center">{{ total }}</td>
+            <td style="text-align:center">{{ n_conformes }}</td>
+            <td style="text-align:center">{{ n_ressalvas }}</td>
+            <td style="text-align:center">{{ n_nao_conformes }}</td>
+            <td style="text-align:center">{{ n_pendentes }}</td>
+            <td style="text-align:center">{{ perc_conformidade }}%</td>
+        </tr>
+    </tbody>
+</table>
+
+{% if por_lote %}
+<div class="section-title">Por Lote</div>
+<table>
+    <thead>
+        <tr>
+            <th>Lote</th>
+            <th style="text-align:center">Total</th>
+            <th style="text-align:center">Conformes</th>
+            <th style="text-align:center">Com Ressalvas</th>
+            <th style="text-align:center">Não Conformes</th>
+            <th style="text-align:center">% Conformidade</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in por_lote %}
+        <tr class="{% cycle 'odd' 'even' %}">
+            <td>{{ row.numero }}</td>
+            <td style="text-align:center">{{ row.total }}</td>
+            <td style="text-align:center" class="ok">{{ row.conformes }}</td>
+            <td style="text-align:center" class="warn">{{ row.ressalvas }}</td>
+            <td style="text-align:center" class="nok">{{ row.nao_conformes }}</td>
+            <td style="text-align:center;font-weight:bold">{{ row.perc }}%</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+</body>
+</html>

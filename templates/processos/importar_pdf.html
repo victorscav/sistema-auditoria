@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar PDF - Auditoria RPPS{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'processos:lista' %}">Processos</a></li>
+<li class="breadcrumb-item active">Importar PDF</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="mb-0 fw-bold">Importar PDFs</h4>
+        </div>
+
+        <div class="card card-stat mb-3">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-2"><i class="bi bi-info-circle text-primary me-2"></i>Como funciona</h6>
+                <ol class="small text-muted mb-0">
+                    <li>Faça upload de um ou mais arquivos PDF de processos previdenciários.</li>
+                    <li>O sistema extrai automaticamente os dados disponíveis usando OCR/análise de texto.</li>
+                    <li>Uma planilha Excel padronizada é gerada com os dados extraídos.</li>
+                    <li>Baixe, revise e corrija a planilha conforme necessário.</li>
+                    <li>Reimporte a planilha corrigida para criar os processos no sistema.</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="card card-stat">
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Arquivos PDF</label>
+                        <div class="border rounded p-4 text-center" id="drop-zone" style="border-style: dashed !important; cursor: pointer;">
+                            <i class="bi bi-file-earmark-pdf fs-1 text-danger mb-2 d-block"></i>
+                            <p class="mb-1">Arraste e solte os PDFs aqui ou clique para selecionar</p>
+                            <small class="text-muted">Múltiplos arquivos suportados. Tamanho máximo: 50MB por arquivo.</small>
+                            <input type="file" name="pdfs" multiple accept=".pdf" class="d-none" id="pdf-input">
+                        </div>
+                        <div id="file-list" class="mt-2"></div>
+                    </div>
+                    <button type="submit" class="btn btn-danger w-100">
+                        <i class="bi bi-upload me-2"></i>Extrair Dados e Gerar Planilha
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const dropZone = document.getElementById('drop-zone');
+const input = document.getElementById('pdf-input');
+const fileList = document.getElementById('file-list');
+
+dropZone.addEventListener('click', () => input.click());
+
+dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('bg-light');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('bg-light'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('bg-light');
+    input.files = e.dataTransfer.files;
+    updateFileList();
+});
+
+input.addEventListener('change', updateFileList);
+
+function updateFileList() {
+    const files = Array.from(input.files);
+    fileList.innerHTML = files.map(f =>
+        `<div class="badge bg-light text-dark border me-1 mb-1"><i class="bi bi-file-earmark-pdf text-danger me-1"></i>${f.name}</div>`
+    ).join('');
+}
+</script>
+{% endblock %}

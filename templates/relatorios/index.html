@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block title %}Relatórios - Auditoria RPPS{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item active">Relatórios</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-bold">Relatórios</h4>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-stat h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="mb-3">
+                    <div class="bg-success bg-opacity-10 rounded-3 p-3 d-inline-block">
+                        <i class="bi bi-file-earmark-pdf text-success fs-2"></i>
+                    </div>
+                </div>
+                <h6 class="fw-bold">Planilha Analítica de Processos</h6>
+                <p class="text-muted small flex-grow-1">
+                    Exporta todos os processos com status de análise, resultado de elegibilidade, cálculo e folha.
+                </p>
+                <form method="post" action="{% url 'relatorios:analitico' %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <select name="lote" class="form-select form-select-sm">
+                            <option value="">Todos os lotes</option>
+                            {% for lote in lotes %}
+                            <option value="{{ lote.pk }}">{{ lote.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 btn-sm">
+                        <i class="bi bi-download me-1"></i>Exportar Excel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-stat h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="mb-3">
+                    <div class="bg-danger bg-opacity-10 rounded-3 p-3 d-inline-block">
+                        <i class="bi bi-exclamation-triangle text-danger fs-2"></i>
+                    </div>
+                </div>
+                <h6 class="fw-bold">Relatório de Divergências Financeiras</h6>
+                <p class="text-muted small flex-grow-1">
+                    Lista processos com divergência entre valor concedido e valor pago na folha, com impacto financeiro.
+                </p>
+                <form method="post" action="{% url 'relatorios:divergencias' %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <select name="lote" class="form-select form-select-sm">
+                            <option value="">Todos os lotes</option>
+                            {% for lote in lotes %}
+                            <option value="{{ lote.pk }}">{{ lote.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-danger w-100 btn-sm">
+                        <i class="bi bi-download me-1"></i>Exportar Excel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-stat h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="mb-3">
+                    <div class="bg-primary bg-opacity-10 rounded-3 p-3 d-inline-block">
+                        <i class="bi bi-bar-chart text-primary fs-2"></i>
+                    </div>
+                </div>
+                <h6 class="fw-bold">Indicadores de Conformidade</h6>
+                <p class="text-muted small flex-grow-1">
+                    Resumo estatístico de conformidade por tipo de benefício, com percentuais e totais.
+                </p>
+                <form method="post" action="{% url 'relatorios:indicadores' %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <select name="lote" class="form-select form-select-sm">
+                            <option value="">Todos os lotes</option>
+                            {% for lote in lotes %}
+                            <option value="{{ lote.pk }}">{{ lote.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 btn-sm">
+                        <i class="bi bi-download me-1"></i>Exportar Excel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-stat h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="mb-3">
+                    <div class="bg-info bg-opacity-10 rounded-3 p-3 d-inline-block">
+                        <i class="bi bi-table text-info fs-2"></i>
+                    </div>
+                </div>
+                <h6 class="fw-bold">Conferência da Folha de Inativos</h6>
+                <p class="text-muted small flex-grow-1">
+                    Valores concedidos, valores pagos, rubricas, divergências e recomendações de cada processo.
+                </p>
+                <form method="post" action="{% url 'relatorios:folha_inativos' %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <select name="lote" class="form-select form-select-sm">
+                            <option value="">Todos os lotes</option>
+                            {% for lote in lotes %}
+                            <option value="{{ lote.pk }}">{{ lote.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-info w-100 btn-sm text-white">
+                        <i class="bi bi-download me-1"></i>Exportar Excel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-stat h-100">
+            <div class="card-body d-flex flex-column">
+                <div class="mb-3">
+                    <div class="bg-warning bg-opacity-10 rounded-3 p-3 d-inline-block">
+                        <i class="bi bi-lightbulb text-warning fs-2"></i>
+                    </div>
+                </div>
+                <h6 class="fw-bold">Recomendações Técnicas para Saneamento</h6>
+                <p class="text-muted small flex-grow-1">
+                    Todos os achados com normas aplicáveis, impacto financeiro e recomendações de saneamento.
+                </p>
+                <form method="post" action="{% url 'relatorios:recomendacoes' %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <select name="lote" class="form-select form-select-sm">
+                            <option value="">Todos os lotes</option>
+                            {% for lote in lotes %}
+                            <option value="{{ lote.pk }}">{{ lote.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100 btn-sm">
+                        <i class="bi bi-download me-1"></i>Exportar Excel
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-stat h-100 border-primary border-2">
+            <div class="card-body d-flex flex-column">
+                <div class="mb-3">
+                    <div class="bg-primary bg-opacity-10 rounded-3 p-3 d-inline-block">
+                        <i class="bi bi-archive text-primary fs-2"></i>
+                    </div>
+                </div>
+                <h6 class="fw-bold">Relatório Final Consolidado por Lote</h6>
+                <p class="text-muted small flex-grow-1">
+                    Workbook completo com 4 abas: Resumo Executivo, Planilha Analítica, Divergências Financeiras e Achados &amp; Recomendações.
+                </p>
+                <form method="post" action="{% url 'relatorios:final_lote' %}">
+                    {% csrf_token %}
+                    <div class="mb-2">
+                        <select name="lote" class="form-select form-select-sm">
+                            <option value="">Todos os lotes</option>
+                            {% for lote in lotes %}
+                            <option value="{{ lote.pk }}">{{ lote.numero }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 btn-sm">
+                        <i class="bi bi-download me-1"></i>Exportar Excel Completo
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Estatísticas rápidas -->
+<div class="card card-stat mt-4">
+    <div class="card-body">
+        <h6 class="fw-semibold mb-3">Resumo Atual</h6>
+        <div class="row g-3 text-center">
+            <div class="col-6 col-md-2">
+                <div class="fs-4 fw-bold text-primary">{{ stats.total }}</div>
+                <div class="small text-muted">Total</div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="fs-4 fw-bold text-success">{{ stats.conformes }}</div>
+                <div class="small text-muted">Conformes</div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="fs-4 fw-bold text-warning">{{ stats.ressalvas }}</div>
+                <div class="small text-muted">Com Ressalvas</div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="fs-4 fw-bold text-danger">{{ stats.nao_conformes }}</div>
+                <div class="small text-muted">Não Conformes</div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="fs-4 fw-bold text-secondary">{{ stats.pendentes }}</div>
+                <div class="small text-muted">Pendentes</div>
+            </div>
+            <div class="col-6 col-md-2">
+                <div class="fs-4 fw-bold text-info">{{ stats.divergencias }}</div>
+                <div class="small text-muted">Divergências</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

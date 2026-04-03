@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}Institutos RPPS{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item active">Institutos</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="bi bi-bank me-2"></i>Institutos RPPS</h4>
+    <a href="{% url 'institutos:novo' %}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Novo Instituto
+    </a>
+</div>
+
+{% if institutos %}
+<div class="row g-3">
+    {% for inst in institutos %}
+    <div class="col-md-4">
+        <div class="card card-stat h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="fw-bold mb-0">{{ inst.nome }}</h6>
+                    {% if inst.ativo %}
+                    <span class="badge bg-success">Ativo</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inativo</span>
+                    {% endif %}
+                </div>
+                <p class="text-muted small mb-2">
+                    <i class="bi bi-geo-alt me-1"></i>{{ inst.municipio }}/{{ inst.estado }}
+                </p>
+                {% if inst.lei_organica %}
+                <p class="text-muted small mb-2">
+                    <i class="bi bi-file-text me-1"></i>{{ inst.lei_organica }}
+                </p>
+                {% endif %}
+                <div class="d-flex align-items-center gap-2 mt-3">
+                    <span class="badge bg-primary">{{ inst.regras.count }} regra{{ inst.regras.count|pluralize }}</span>
+                    <a href="{% url 'institutos:detalhe' inst.pk %}" class="btn btn-outline-primary btn-sm ms-auto">
+                        <i class="bi bi-eye me-1"></i>Ver
+                    </a>
+                    <a href="{% url 'institutos:editar' inst.pk %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5 text-muted">
+    <i class="bi bi-bank" style="font-size: 3rem; opacity: 0.3;"></i>
+    <p class="mt-3">Nenhum instituto cadastrado ainda.</p>
+    <a href="{% url 'institutos:novo' %}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Cadastrar primeiro instituto
+    </a>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block title %}Lotes - Auditoria RPPS{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item active">Lotes</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-bold">Lotes</h4>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#novoLoteModal">
+        <i class="bi bi-plus-lg me-1"></i>Novo Lote
+    </button>
+</div>
+
+<div class="row g-3">
+    {% for lote in lotes %}
+    <div class="col-md-6 col-xl-4">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="fw-bold mb-0">{{ lote.numero }}</h6>
+                        <small class="text-muted">{{ lote.descricao|truncatechars:50 }}</small>
+                    </div>
+                    <span class="badge {% if lote.status == 'ABERTO' %}bg-success{% elif lote.status == 'EM_ANDAMENTO' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                        {{ lote.get_status_display }}
+                    </span>
+                </div>
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between mb-1">
+                        <small class="text-muted">Progresso</small>
+                        <small>{{ lote.percentual_conclusao }}%</small>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar {% if lote.percentual_conclusao == 100 %}bg-success{% endif %}" style="width: {{ lote.percentual_conclusao }}%"></div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">{{ lote.processos_concluidos }}/{{ lote.total_processos }} processos</small>
+                    <div class="d-flex gap-1">
+                        <a href="{% url 'processos:lista' %}?lote={{ lote.pk }}" class="btn btn-sm btn-outline-primary py-0">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                        <a href="{% url 'processos:editar_lote' lote.pk %}" class="btn btn-sm btn-outline-secondary py-0">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-1">Criado: {{ lote.data_criacao|date:"d/m/Y" }}</small>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="card card-stat text-center py-5">
+            <div class="card-body">
+                <i class="bi bi-layers fs-1 text-muted d-block mb-2"></i>
+                <p class="text-muted">Nenhum lote cadastrado.</p>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#novoLoteModal">
+                    Criar primeiro lote
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal Novo Lote -->
+<div class="modal fade" id="novoLoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Novo Lote</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="novo_lote">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Número do Lote</label>
+                        <input type="text" name="numero" class="form-control" required placeholder="Ex: LOTE-2024-001">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Descrição</label>
+                        <textarea name="descricao" class="form-control" rows="3" placeholder="Descrição do lote..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Criar Lote</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

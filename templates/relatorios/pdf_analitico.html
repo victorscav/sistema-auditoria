@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8">{% include 'relatorios/pdf_base_styles.html' %}</head>
+<body>
+<div class="pdf-header">
+    <div class="meta">
+        Lote: {{ lote_label }}<br>
+        Gerado em: {{ data_geracao }}
+    </div>
+    <h1>Planilha Analítica de Status dos Processos</h1>
+    <div class="subtitle">Auditoria de Conformidade Previdenciária — RPPS</div>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Processo</th>
+            <th>Beneficiário</th>
+            <th>CPF</th>
+            <th>Tipo Benefício</th>
+            <th>Instituto</th>
+            <th>Lote</th>
+            <th>Dt. Concessão</th>
+            <th>Vl. Concedido</th>
+            <th>Vl. Folha</th>
+            <th>Elegibilidade</th>
+            <th>Cálculo</th>
+            <th>Conf. Folha</th>
+            <th>Resultado</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in processos %}
+        {% with eleg=p.analiseelegibilidade calc=p.analisecalculo folha=p.conferenciafolha dados=p.dados_beneficio resultado=p.get_resultado_analise %}
+        <tr class="{% cycle 'odd' 'even' %}">
+            <td>{{ p.numero }}</td>
+            <td>{{ p.beneficiario.nome }}</td>
+            <td>{{ p.beneficiario.cpf }}</td>
+            <td>{{ p.get_tipo_beneficio_display }}</td>
+            <td>{% if p.instituto %}{{ p.instituto.nome }}{% endif %}</td>
+            <td>{% if p.lote %}{{ p.lote.numero }}{% endif %}</td>
+            <td>{% if p.data_concessao %}{{ p.data_concessao|date:"d/m/Y" }}{% endif %}</td>
+            <td>{% if dados %}{% if dados.valor_concedido %}R$ {{ dados.valor_concedido }}{% endif %}{% endif %}</td>
+            <td>{% if dados %}{% if dados.valor_pago_folha %}R$ {{ dados.valor_pago_folha }}{% endif %}{% endif %}</td>
+            <td class="{% if eleg %}{% if eleg.resultado == 'CONFORME' %}ok{% elif eleg.resultado == 'NAO_CONFORME' %}nok{% else %}warn{% endif %}{% endif %}">
+                {% if eleg %}{{ eleg.get_resultado_display }}{% else %}Pendente{% endif %}
+            </td>
+            <td class="{% if calc %}{% if calc.resultado == 'CONFORME' %}ok{% elif calc.resultado == 'NAO_CONFORME' %}nok{% else %}warn{% endif %}{% endif %}">
+                {% if calc %}{{ calc.get_resultado_display }}{% else %}Pendente{% endif %}
+            </td>
+            <td class="{% if folha %}{% if folha.resultado == 'CONFORME' %}ok{% elif folha.resultado == 'NAO_CONFORME' %}nok{% else %}warn{% endif %}{% endif %}">
+                {% if folha %}{{ folha.get_resultado_display }}{% else %}Pendente{% endif %}
+            </td>
+            <td class="badge-{{ resultado|lower|default:'pendente' }}">
+                {{ resultado|default:"Pendente" }}
+            </td>
+        </tr>
+        {% endwith %}
+        {% empty %}
+        <tr><td colspan="13" style="text-align:center; color:#888;">Nenhum processo encontrado.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p style="font-size:7pt; color:#555; margin-top:6pt;">
+    Total: {{ processos|length }} processo(s) &nbsp;|&nbsp;
+    Conformes: {{ n_conformes }} &nbsp;|&nbsp;
+    Com Ressalvas: {{ n_ressalvas }} &nbsp;|&nbsp;
+    Não Conformes: {{ n_nao_conformes }} &nbsp;|&nbsp;
+    Pendentes: {{ n_pendentes }}
+</p>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+    @page {
+        size: A4 portrait;
+        margin: 2cm 1.5cm 2cm 1.5cm;
+        @frame footer {
+            -pdf-frame-content: footer_content;
+            bottom: 0.5cm; height: 0.8cm;
+        }
+    }
+    body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #222; }
+    h1 { font-size: 14pt; color: #1A3A5C; margin: 0 0 3pt 0; }
+    h2 { font-size: 10pt; color: #1A3A5C; margin: 12pt 0 4pt 0; border-bottom: 1pt solid #1A3A5C; padding-bottom: 2pt; }
+    .header { border-bottom: 2pt solid #1A3A5C; padding-bottom: 6pt; margin-bottom: 10pt; }
+    .subtitle { font-size: 8pt; color: #555; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; }
+    .meta-table td { font-size: 8.5pt; padding: 3pt 5pt; border: 0.5pt solid #ddd; }
+    .meta-table td:first-child { font-weight: bold; color: #1A3A5C; width: 35%; background: #F0F4F8; }
+    .check-table { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+    .check-table th { background: #1A3A5C; color: #fff; font-size: 8pt; padding: 3pt 5pt; text-align: left; border: 0.5pt solid #0d2340; }
+    .check-table td { font-size: 8pt; padding: 2.5pt 5pt; border: 0.5pt solid #ccc; vertical-align: top; }
+    .check-table tr.even td { background: #F8F9FA; }
+    .ok { color: #155724; font-weight: bold; }
+    .nok { color: #721c24; font-weight: bold; }
+    .warn { color: #856404; font-weight: bold; }
+    .texto-nota { border: 1pt solid #ccc; padding: 8pt; background: #FAFAFA; font-size: 9pt; line-height: 1.5; min-height: 60pt; }
+    .limitacao { border: 1pt solid #f5c6cb; padding: 8pt; background: #FFF5F5; font-size: 9pt; line-height: 1.5; }
+    .achado-box { border: 0.5pt solid #ccc; padding: 5pt; margin-bottom: 5pt; background: #FDFAE7; }
+    .badge-nao_conforme { color: #721c24; font-weight: bold; }
+    .badge-conforme { color: #155724; font-weight: bold; }
+    .badge-ressalvas, .badge-conforme_ressalvas { color: #856404; font-weight: bold; }
+    .badge-indeterminado { color: #555; }
+    #footer_content { font-size: 6.5pt; color: #888; text-align: center; border-top: 0.5pt solid #ccc; padding-top: 2pt; }
+</style>
+</head>
+<body>
+
+<div id="footer_content">
+    Nota Técnica — Processo {{ processo.numero }} · RPPS Barra Mansa · Gerado em {{ data_geracao }} · Página <pdf:pagenumber> de <pdf:pagecount>
+</div>
+
+<!-- Cabeçalho -->
+<div class="header">
+    <div style="font-size:7.5pt;color:#555;letter-spacing:1pt;text-transform:uppercase;">Auditoria Técnica Previdenciária — RPPS Barra Mansa</div>
+    <h1>NOTA TÉCNICA DE AUDITORIA</h1>
+    <div class="subtitle">Processo: {{ processo.numero }} — {{ processo.beneficiario.nome }}</div>
+</div>
+
+<!-- Identificação do processo -->
+<h2>1. Identificação do Processo</h2>
+<table class="meta-table">
+    <tr><td>Número do Processo</td><td>{{ processo.numero }}</td></tr>
+    <tr><td>Beneficiário</td><td>{{ processo.beneficiario.nome }}</td></tr>
+    <tr><td>CPF</td><td>{{ processo.beneficiario.cpf }}</td></tr>
+    <tr><td>Matrícula</td><td>{{ processo.beneficiario.matricula|default:"—" }}</td></tr>
+    <tr><td>Cargo / Carreira</td><td>{{ processo.beneficiario.cargo|default:"—" }}{% if processo.beneficiario.carreira %} / {{ processo.beneficiario.carreira }}{% endif %}</td></tr>
+    <tr><td>Tipo de Benefício</td><td>{{ processo.get_tipo_beneficio_display }}</td></tr>
+    <tr><td>Data de Concessão</td><td>{% if processo.data_concessao %}{{ processo.data_concessao|date:"d/m/Y" }}{% else %}—{% endif %}</td></tr>
+    <tr><td>Instituto RPPS</td><td>{% if processo.instituto %}{{ processo.instituto }}{% else %}—{% endif %}</td></tr>
+    <tr><td>Lote</td><td>{% if processo.lote %}{{ processo.lote.numero }}{% else %}—{% endif %}</td></tr>
+    <tr><td>Data da Nota Técnica</td><td>{{ data_geracao }}</td></tr>
+    {% if nota and nota.auditor %}<tr><td>Auditor Responsável</td><td>{{ nota.auditor }}</td></tr>{% endif %}
+</table>
+
+<!-- Resultado da análise -->
+<h2>2. Resultado da Análise</h2>
+<table class="check-table">
+    <thead>
+        <tr><th style="width:45%">Módulo</th><th style="width:20%">Resultado</th><th>Observações Relevantes</th></tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Elegibilidade</td>
+            <td class="{% if elegibilidade %}badge-{{ elegibilidade.resultado|lower }}{% endif %}">
+                {% if elegibilidade %}{{ elegibilidade.get_resultado_display }}{% else %}Pendente{% endif %}
+            </td>
+            <td style="font-size:7.5pt">
+                {% if elegibilidade %}
+                {% if not elegibilidade.enquadramento_correto %}<div>Enquadramento: {{ elegibilidade.enquadramento_obs }}</div>{% endif %}
+                {% if not elegibilidade.requisitos_idade %}<div>Idade: {{ elegibilidade.requisitos_idade_obs }}</div>{% endif %}
+                {% if not elegibilidade.tempo_contribuicao_ok %}<div>Contribuição: {{ elegibilidade.tempo_contribuicao_obs }}</div>{% endif %}
+                {% if not elegibilidade.carreira_cargo_ok %}<div>Carreira/Cargo: {{ elegibilidade.carreira_cargo_obs }}</div>{% endif %}
+                {% endif %}
+            </td>
+        </tr>
+        <tr class="even">
+            <td>Conformidade de Cálculo</td>
+            <td class="{% if calculo %}badge-{{ calculo.resultado|lower }}{% endif %}">
+                {% if calculo %}{{ calculo.get_resultado_display }}{% else %}Pendente{% endif %}
+            </td>
+            <td style="font-size:7.5pt">
+                {% if calculo %}
+                {% if not calculo.teto_acumulacao_ok %}<div>Teto: {{ calculo.teto_acumulacao_obs }}</div>{% endif %}
+                {% if not calculo.media_integralidade_ok %}<div>Integralidade: {{ calculo.media_integralidade_obs }}</div>{% endif %}
+                {% if not calculo.redutor_ok %}<div>Redutor: {{ calculo.redutor_obs }}</div>{% endif %}
+                {% if not calculo.reajuste_ok %}<div>Reajuste: {{ calculo.reajuste_obs }}</div>{% endif %}
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td>Conferência de Folha</td>
+            <td class="{% if folha %}badge-{{ folha.resultado|lower }}{% endif %}">
+                {% if folha %}{{ folha.get_resultado_display }}{% else %}Pendente{% endif %}
+            </td>
+            <td style="font-size:7.5pt">
+                {% if folha and folha.tipo_divergencia != 'SEM_DIVERGENCIA' %}
+                <div>{{ folha.get_tipo_divergencia_display }}{% if folha.impacto_financeiro_estimado %} — Impacto: R$ {{ folha.impacto_financeiro_estimado }}{% endif %}</div>
+                {% endif %}
+            </td>
+        </tr>
+        <tr class="even">
+            <td><strong>Resultado Final</strong></td>
+            <td colspan="2">
+                {% with resultado=processo.get_resultado_analise %}
+                <span class="badge-{{ resultado|lower|default:'pendente' }}">
+                    <strong>{{ resultado|default:"Pendente" }}</strong>
+                </span>
+                {% endwith %}
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- Texto da nota técnica -->
+<h2>3. Análise Técnica</h2>
+<div class="texto-nota">
+    {% if nota and nota.texto %}
+        {{ nota.texto|linebreaks }}
+    {% else %}
+        <span style="color:#aaa;font-style:italic;">Nota técnica não elaborada.</span>
+    {% endif %}
+</div>
+
+<!-- Achados -->
+{% if achados %}
+<h2>4. Achados de Auditoria</h2>
+{% for achado in achados %}
+<div class="achado-box">
+    <div style="margin-bottom:3pt">
+        <span class="badge-{{ achado.classificacao|lower }}">{{ achado.get_classificacao_display }}</span>
+        <span style="font-size:7.5pt;color:#555;margin-left:6pt">{{ achado.data_registro|date:"d/m/Y" }}</span>
+    </div>
+    <div style="margin-bottom:2pt">{{ achado.descricao }}</div>
+    {% if achado.normas_aplicaveis %}<div style="font-size:7.5pt;color:#555"><strong>Normas:</strong> {{ achado.normas_aplicaveis }}</div>{% endif %}
+    {% if achado.impacto_financeiro %}<div style="font-size:7.5pt;color:#721c24"><strong>Impacto financeiro estimado:</strong> R$ {{ achado.impacto_financeiro }}</div>{% endif %}
+    {% if achado.recomendacao %}<div style="font-size:7.5pt;color:#155724"><strong>Recomendação:</strong> {{ achado.recomendacao }}</div>{% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Limitações documentais -->
+{% if nota and nota.limitacao_documental %}
+<h2>5. Limitações Técnicas (cf. Cláusula 12.4)</h2>
+<div class="limitacao">{{ nota.limitacao_documental|linebreaks }}</div>
+{% endif %}
+
+<!-- Assinatura -->
+<div style="margin-top:30pt;border-top:0.5pt solid #ccc;padding-top:10pt;text-align:center;font-size:8pt;color:#555;">
+    <div style="margin-bottom:20pt">________________________________________</div>
+    <div>Auditor(a) Responsável</div>
+    <div style="margin-top:2pt">RPPS Barra Mansa — {{ data_geracao }}</div>
+</div>
+
+</body>
+</html>

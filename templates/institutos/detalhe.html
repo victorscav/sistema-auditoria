@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ instituto.nome }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'institutos:lista' %}">Institutos</a></li>
+<li class="breadcrumb-item active">{{ instituto.nome }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0">{{ instituto.nome }}</h4>
+        <small class="text-muted">{{ instituto.municipio }}/{{ instituto.estado }}
+            {% if instituto.cnpj %} · CNPJ: {{ instituto.cnpj }}{% endif %}
+        </small>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'institutos:nova_regra' instituto.pk %}" class="btn btn-success btn-sm">
+            <i class="bi bi-plus-lg me-1"></i>Nova Regra
+        </a>
+        <a href="{% url 'institutos:editar' instituto.pk %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-pencil me-1"></i>Editar Instituto
+        </a>
+        <a href="{% url 'institutos:lista' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Voltar
+        </a>
+    </div>
+</div>
+
+<!-- Info -->
+<div class="card card-stat mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            {% if instituto.lei_organica %}
+            <div class="col-md-4">
+                <small class="text-muted d-block">Lei Orgânica</small>
+                <span class="fw-semibold">{{ instituto.lei_organica }}</span>
+            </div>
+            {% endif %}
+            <div class="col-md-2">
+                <small class="text-muted d-block">Status</small>
+                {% if instituto.ativo %}
+                <span class="badge bg-success">Ativo</span>
+                {% else %}
+                <span class="badge bg-secondary">Inativo</span>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <small class="text-muted d-block">Reforma EC 103/2019</small>
+                {% if instituto.aderiu_ec103_2019 %}
+                <span class="badge bg-warning text-dark">
+                    <i class="bi bi-exclamation-triangle me-1"></i>Aderiu — normas anteriores revogadas
+                </span>
+                {% else %}
+                <span class="badge bg-info text-dark">Não aderiu — normas anteriores vigentes</span>
+                {% endif %}
+            </div>
+            {% if instituto.observacoes %}
+            <div class="col-12">
+                <small class="text-muted d-block">Observações</small>
+                <span class="small">{{ instituto.observacoes }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ── Regras Municipais ─────────────────────────────────────────────────── -->
+<h5 class="fw-semibold mb-3">
+    <i class="bi bi-building me-1"></i>Regras Municipais ({{ regras_municipais.count }})
+</h5>
+
+{% if regras_municipais %}
+<div class="table-responsive mb-5">
+    <table class="table table-bordered table-hover bg-white">
+        <thead class="table-light">
+            <tr>
+                <th>Tipo</th>
+                <th>Norma Base</th>
+                <th>Vigência</th>
+                <th>Idade (H/M)</th>
+                <th>Contrib. (H/M)</th>
+                <th>Teto (R$)</th>
+                <th>Reajuste</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for regra in regras_municipais %}
+            <tr>
+                <td class="small fw-semibold">{{ regra.get_tipo_beneficio_display }}</td>
+                <td class="small">{{ regra.norma_base }}</td>
+                <td class="small text-nowrap">
+                    {{ regra.vigente_desde|date:"d/m/Y" }}
+                    {% if regra.vigente_ate %} a {{ regra.vigente_ate|date:"d/m/Y" }}{% else %} — atual{% endif %}
+                </td>
+                <td class="small text-center">
+                    {{ regra.idade_minima_homem|default:"—" }} / {{ regra.idade_minima_mulher|default:"—" }}
+                </td>
+                <td class="small text-center">
+                    {{ regra.tempo_contribuicao_homem|default:"—" }} / {{ regra.tempo_contribuicao_mulher|default:"—" }}
+                </td>
+                <td class="small text-end">
+                    {% if regra.teto_remuneratorio %}R$ {{ regra.teto_remuneratorio }}{% else %}—{% endif %}
+                </td>
+                <td class="small">{{ regra.criterio_reajuste|default:"—" }}</td>
+                <td>
+                    {% if regra.ativa %}
+                    <span class="badge bg-success">Ativa</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inativa</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'institutos:editar_regra' regra.pk %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-4 text-muted mb-5">
+    <p>Nenhuma regra municipal cadastrada para este instituto.</p>
+    <a href="{% url 'institutos:nova_regra' instituto.pk %}" class="btn btn-success btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Adicionar primeira regra
+    </a>
+</div>
+{% endif %}
+
+<!-- ── Normas Federais / Constitucionais ────────────────────────────────── -->
+{% if instituto.aderiu_ec103_2019 %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+    <div>
+        <strong>Instituto aderiu à Reforma da EC 103/2019.</strong>
+        As normas constitucionais anteriores (CF/88, EC 41/2003, EC 47/2005, EC 70/2012) foram revogadas pela legislação municipal própria e não são exibidas.
+    </div>
+</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="fw-semibold mb-0">
+        <i class="bi bi-bank me-1 text-primary"></i>
+        Normas Federais / Constitucionais
+        <span class="badge bg-primary ms-2">{{ regras_federais|length }}</span>
+    </h5>
+    <small class="text-muted fst-italic">
+        Aplicáveis a todos os institutos que não aderiram à EC 103/2019 — lei maior paralela à legislação municipal
+    </small>
+</div>
+
+{% if regras_federais %}
+<div class="table-responsive">
+    <table class="table table-bordered table-hover" style="background-color: #f0f4ff;">
+        <thead style="background-color: #dce6ff;">
+            <tr>
+                <th>Tipo</th>
+                <th>Norma Base</th>
+                <th>Vigente Desde</th>
+                <th>Idade (H/M)</th>
+                <th>Contrib. (H/M)</th>
+                <th>Serv. Púb. / Cargo</th>
+                <th>Integralidade</th>
+                <th>Reajuste</th>
+                <th>Observações</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for regra in regras_federais %}
+            <tr>
+                <td class="small fw-semibold">{{ regra.get_tipo_beneficio_display }}</td>
+                <td class="small">{{ regra.norma_base }}</td>
+                <td class="small text-nowrap">{{ regra.vigente_desde|date:"d/m/Y" }}</td>
+                <td class="small text-center">
+                    {{ regra.idade_minima_homem|default:"—" }} / {{ regra.idade_minima_mulher|default:"—" }}
+                </td>
+                <td class="small text-center">
+                    {{ regra.tempo_contribuicao_homem|default:"—" }} / {{ regra.tempo_contribuicao_mulher|default:"—" }}
+                </td>
+                <td class="small text-center">
+                    {% if regra.tempo_servico_publico %}SP: {{ regra.tempo_servico_publico }}a{% else %}—{% endif %}
+                    {% if regra.tempo_carreira %} / Car: {{ regra.tempo_carreira }}a{% endif %}
+                    {% if regra.tempo_no_cargo %} / Cargo: {{ regra.tempo_no_cargo }}a{% endif %}
+                </td>
+                <td class="small text-center">
+                    {% if regra.integralidade is None %}—
+                    {% elif regra.integralidade %}
+                    <span class="badge bg-success">Integral</span>
+                    {% else %}
+                    <span class="badge bg-warning text-dark">Proporcional</span>
+                    {% endif %}
+                </td>
+                <td class="small">{{ regra.criterio_reajuste|default:"—" }}</td>
+                <td class="small text-muted" style="max-width:260px; white-space:normal;">
+                    {% if regra.observacoes %}
+                    <span title="{{ regra.observacoes }}">
+                        {{ regra.observacoes|truncatewords:18 }}
+                    </span>
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

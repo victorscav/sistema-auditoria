@@ -1,0 +1,953 @@
+{% extends 'base.html' %}
+
+{% block title %}Análise - Processo {{ processo.numero }}{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'processos:lista' %}">Processos</a></li>
+<li class="breadcrumb-item"><a href="{% url 'processos:detalhe' processo.pk %}">{{ processo.numero }}</a></li>
+<li class="breadcrumb-item active">Análise</li>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .auto-filled { background-color: #e8f4fd !important; border-color: #90caf9 !important; }
+    .auto-filled-obs { background-color: #e8f4fd !important; border-color: #90caf9 !important; font-size: 0.8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="mb-0 fw-bold">Análise - Processo {{ processo.numero }}</h4>
+        <small class="text-muted">{{ processo.beneficiario.nome }} | {{ processo.get_tipo_beneficio_display }}</small>
+    </div>
+    <a href="{% url 'processos:detalhe' processo.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Voltar
+    </a>
+</div>
+
+<!-- Painel de Pré-Análise Automática -->
+<div class="card card-stat mb-3 border-primary border-opacity-50">
+    <div class="card-body py-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label small fw-semibold mb-1">Instituto RPPS</label>
+                <select id="sel-instituto" class="form-select form-select-sm">
+                    <option value="">Selecione o instituto...</option>
+                    {% for inst in institutos_list %}
+                    <option value="{{ inst.pk }}" {% if processo.instituto_id == inst.pk %}selected{% endif %}>{{ inst.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-auto">
+                <button id="btn-analisar" class="btn btn-warning btn-sm" disabled>
+                    <i class="bi bi-lightning-charge me-1"></i>Analisar Automaticamente
+                </button>
+            </div>
+            <div id="info-regra" class="col-12 mt-1" style="display:none;">
+                <small class="text-muted"><i class="bi bi-info-circle me-1"></i><span id="txt-regra"></span></small>
+            </div>
+            <div id="resumo-auto" class="col-12 mt-1" style="display:none;">
+                <small id="msg-conformes" class="text-success me-3"></small>
+                <small id="msg-nao-conformes" class="text-danger me-3"></small>
+                <small id="msg-nulos" class="text-secondary"></small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Abas -->
+<ul class="nav nav-tabs mb-3" id="analiseTab">
+    <li class="nav-item">
+        <a class="nav-link {% if aba_ativa == 'elegibilidade' %}active{% endif %}" href="?aba=elegibilidade">
+            <i class="bi bi-person-check me-1"></i>Elegibilidade
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if aba_ativa == 'calculo' %}active{% endif %}" href="?aba=calculo">
+            <i class="bi bi-calculator me-1"></i>Conformidade de Cálculo
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if aba_ativa == 'folha' %}active{% endif %}" href="?aba=folha">
+            <i class="bi bi-receipt me-1"></i>Conferência de Folha
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if aba_ativa == 'achados' %}active{% endif %}" href="?aba=achados">
+            <i class="bi bi-search me-1"></i>Achados
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if aba_ativa == 'nota_tecnica' %}active{% endif %}" href="?aba=nota_tecnica">
+            <i class="bi bi-file-earmark-text me-1"></i>Nota Técnica
+            {% if nota_tecnica %}<span class="badge bg-success ms-1" style="font-size:0.6rem;">✓</span>{% endif %}
+        </a>
+    </li>
+</ul>
+
+<!-- Elegibilidade -->
+{% if aba_ativa == 'elegibilidade' %}
+
+<!-- Painel: Composição do Tempo de Contribuição -->
+<div class="card card-stat mb-3 border-primary">
+    <div class="card-body">
+        <h6 class="fw-semibold mb-3">
+            <i class="bi bi-clock-history me-2 text-primary"></i>Composição do Tempo de Contribuição
+        </h6>
+        <div class="row g-3 align-items-start">
+
+            <!-- Tempo próprio -->
+            <div class="col-md-3">
+                <div class="border rounded p-2 text-center h-100">
+                    <small class="text-muted d-block">Tempo Próprio (declarado)</small>
+                    <span class="fw-bold fs-6">
+                        {% if dados_beneficio and dados_beneficio.tempo_contribuicao %}
+                            {{ dados_beneficio.tempo_contribuicao }}
+                        {% else %}
+                            <span class="text-muted">Não informado</span>
+                        {% endif %}
+                    </span>
+                    {% if anos_proprio %}
+                    <small class="text-muted d-block">({{ anos_proprio|floatformat:1 }} anos)</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Certidões averbadas -->
+            <div class="col-md-5">
+                <div class="border rounded p-2 h-100">
+                    <small class="text-muted d-block mb-1">Tempo Averbado (certidões)</small>
+                    {% if certidoes %}
+                        {% for ctc in certidoes %}
+                        <div class="d-flex justify-content-between align-items-center small {% if not forloop.last %}border-bottom pb-1 mb-1{% endif %}">
+                            <div>
+                                <span class="fw-semibold">{{ ctc.orgao_emissor }}</span>
+                                <span class="badge bg-secondary ms-1" style="font-size:0.65rem">{{ ctc.get_tipo_origem_display }}</span><br>
+                                <span class="text-muted">Certificado: {{ ctc.tempo_certificado_display }}</span>
+                                {% if ctc.possui_concomitancia %}
+                                <br><span class="text-danger">Concomitante: − {{ ctc.tempo_concomitante_display }}</span>
+                                {% endif %}
+                            </div>
+                            <span class="fw-bold text-success text-nowrap ms-2">{{ ctc.tempo_averbavel_display }}</span>
+                        </div>
+                        {% endfor %}
+                        <div class="mt-1 pt-1 border-top d-flex justify-content-between">
+                            <small class="text-muted">Total averbado</small>
+                            <small class="fw-bold text-success">{{ averbado_display }}</small>
+                        </div>
+                    {% else %}
+                        <small class="text-muted fst-italic">Nenhuma certidão averbada.
+                            <a href="{% url 'processos:detalhe' processo.pk %}">Adicionar na tela do processo.</a>
+                        </small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Total efetivo -->
+            <div class="col-md-4">
+                <div class="border rounded p-2 text-center h-100 {% if total_contrib_display %}bg-light{% endif %}">
+                    <small class="text-muted d-block">Total Efetivo de Contribuição</small>
+                    {% if total_contrib_display %}
+                    <span class="fw-bold fs-5 text-primary">{{ total_contrib_display }}</span>
+                    <small class="text-muted d-block">({{ total_contrib_anos }} anos)</small>
+                    <hr class="my-1">
+                    <small class="text-muted">= tempo próprio + averbado − concomitâncias</small>
+                    {% else %}
+                    <span class="text-muted fst-italic small">Informe o tempo de contribuição nos dados do processo.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if not certidoes %}
+        <div class="alert alert-warning py-2 mt-2 small mb-0">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Verifique se existem certidões de tempo de contribuição ao INSS ou a outros regimes próprios.
+            Se existirem, <a href="{% url 'processos:detalhe' processo.pk %}">cadastre-as no processo</a>
+            para que o tempo averbado seja considerado no confronto com a regra.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card card-stat">
+    <div class="card-body">
+        <h6 class="fw-semibold mb-3">Análise de Elegibilidade</h6>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="aba" value="elegibilidade">
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 35%">Item de Verificação</th>
+                            <th style="width: 15%">Resultado</th>
+                            <th>Observações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in elegibilidade_rows %}
+                        <tr>
+                            <td class="fw-semibold small">{{ row.label }}</td>
+                            <td>
+                                <select name="{{ row.field_ok }}" class="form-select form-select-sm">
+                                    <option value="">-</option>
+                                    <option value="true" {% if row.value_ok == True %}selected{% endif %}>Conforme</option>
+                                    <option value="false" {% if row.value_ok == False %}selected{% endif %}>Não Conforme</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" name="{{ row.field_obs }}" value="{{ row.value_obs }}" class="form-control form-control-sm" placeholder="Observações...">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="row align-items-end mt-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Resultado Geral</label>
+                    <select name="resultado" class="form-select">
+                        {% for val, label in resultado_choices %}
+                        <option value="{{ val }}" {% if elegibilidade and elegibilidade.resultado == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Elegibilidade
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Cálculo -->
+{% elif aba_ativa == 'calculo' %}
+<div class="card card-stat">
+    <div class="card-body">
+        <h6 class="fw-semibold mb-3">Análise de Conformidade de Cálculo</h6>
+
+        {% if calculo and calculo.regime_compativel == False %}
+        <div class="alert alert-danger py-2 mb-3">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Incompatibilidade detectada:</strong> {{ calculo.regime_compativel_obs }}
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="aba" value="calculo">
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 35%">Item de Verificação</th>
+                            <th style="width: 15%">Resultado</th>
+                            <th>Observações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in calculo_rows %}
+                        <tr>
+                            <td class="fw-semibold small">{{ row.label }}</td>
+                            <td>
+                                <select name="{{ row.field_ok }}" class="form-select form-select-sm">
+                                    <option value="">-</option>
+                                    <option value="true" {% if row.value_ok == True %}selected{% endif %}>Conforme</option>
+                                    <option value="false" {% if row.value_ok == False %}selected{% endif %}>Não Conforme</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" name="{{ row.field_obs }}" value="{{ row.value_obs }}" class="form-control form-control-sm" placeholder="Observações...">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="row align-items-end mt-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Resultado Geral</label>
+                    <select name="resultado" class="form-select">
+                        {% for val, label in resultado_choices %}
+                        <option value="{{ val }}" {% if calculo and calculo.resultado == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Cálculo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Regime de Reajuste e Reconstrução do Benefício -->
+            <hr class="my-4">
+            <h6 class="fw-semibold mb-3"><i class="bi bi-shield-check me-2 text-warning"></i>Regime de Reajuste e Reconstrução do Benefício</h6>
+
+            {% if dados_beneficio %}
+            <div class="alert alert-info py-2 mb-3">
+                <strong>Regime identificado no processo:</strong>
+                {% if dados_beneficio.regime_reajuste == 'PARIDADE' %}
+                    <span class="badge bg-primary ms-1">Paridade — cargo ativo</span>
+                    <small class="ms-2 text-muted">Use leis municipais de reestruturação/revisão do cargo paradigma.</small>
+                {% elif dados_beneficio.regime_reajuste == 'MEDIA' %}
+                    <span class="badge bg-success ms-1">Média — índice INSS</span>
+                    <small class="ms-2 text-muted">Use a tabela de índices INSS para benefícios sem paridade.</small>
+                {% else %}
+                    <span class="badge bg-secondary ms-1">Não definido</span>
+                    <small class="ms-2 text-warning">Informe o regime de reajuste na tela de dados do processo.</small>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm fw-semibold">Método de Reajuste Aplicado</label>
+                    <select name="metodo_reajuste_aplicado" class="form-select form-select-sm" id="metodoReajuste">
+                        <option value="">-- Não informado --</option>
+                        {% for val, label in metodo_reajuste_choices %}
+                        <option value="{{ val }}" {% if calculo and calculo.metodo_reajuste_aplicado == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4" id="campoCargoPar">
+                    <label class="form-label form-label-sm fw-semibold">Lei Municipal Aplicada (Paridade)</label>
+                    <input type="text" name="lei_municipal_aplicada"
+                        value="{{ calculo.lei_municipal_aplicada|default:'' }}"
+                        class="form-control form-control-sm"
+                        placeholder="Ex: Lei nº 1234/2010 — Reestruturação de carreira">
+                </div>
+                <div class="col-md-4" id="campoIndiceINSS">
+                    <label class="form-label form-label-sm fw-semibold">Índice INSS Aplicado (%)</label>
+                    <input type="number" name="indice_inss_aplicado" step="0.0001"
+                        value="{{ calculo.indice_inss_aplicado|default:'' }}"
+                        class="form-control form-control-sm"
+                        placeholder="Ex: 4.61">
+                </div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm fw-semibold">Valor Reconstruído (R$)</label>
+                    <input type="number" name="valor_reconstruido_ano" step="0.01"
+                        value="{{ calculo.valor_reconstruido_ano|default:'' }}"
+                        class="form-control form-control-sm"
+                        placeholder="Valor apurado pela reconstrução">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm fw-semibold">Valor Devido Mês Corrente (R$)</label>
+                    <input type="number" name="valor_devido_mes_corrente" step="0.01"
+                        value="{{ calculo.valor_devido_mes_corrente|default:'' }}"
+                        class="form-control form-control-sm"
+                        placeholder="Valor que deveria ser pago hoje">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label form-label-sm fw-semibold">Diferença vs Folha (R$)</label>
+                    <input type="number" name="diferenca_folha" step="0.01"
+                        value="{{ calculo.diferenca_folha|default:'' }}"
+                        id="diferencaFolha"
+                        class="form-control form-control-sm {% if calculo and calculo.diferenca_folha and calculo.diferenca_folha != 0 %}border-danger{% endif %}"
+                        placeholder="Positivo = pago a mais; Negativo = pago a menos">
+                </div>
+            </div>
+
+            <div id="alertaRegime"></div>
+
+            {% if historico_reajuste %}
+            <div class="table-responsive mb-3">
+                <table class="table table-bordered table-sm">
+                    <thead style="background:#1a3a5c; color:white;">
+                        <tr>
+                            <th>Ano</th>
+                            <th>Norma/Lei</th>
+                            <th class="text-end">% Reajuste</th>
+                            <th class="text-end">Valor Reconstruído</th>
+                            <th>Método</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in historico_reajuste %}
+                        <tr>
+                            <td class="fw-bold">{{ h.ano_reajuste }}</td>
+                            <td><small>{{ h.norma_reajuste|default:'-' }}</small></td>
+                            <td class="text-end">{{ h.percentual_reajuste|default:'-' }}%</td>
+                            <td class="text-end fw-bold text-primary">
+                                {% if h.valor_reconstruido_ano %}R$ {{ h.valor_reconstruido_ano }}{% else %}-{% endif %}
+                            </td>
+                            <td><small>{{ h.get_metodo_reajuste_display }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- Verificação de Reajuste -->
+            {% if tem_reajustes %}
+            <hr class="my-4">
+            <h6 class="fw-semibold mb-3"><i class="bi bi-percent me-2 text-primary"></i>Verificação de Reajuste Anual (INSS)</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm fw-semibold">Valor na Concessão (R$)</label>
+                    <input type="number" name="valor_base_reajuste" id="valorBase" step="0.01"
+                        class="form-control form-control-sm"
+                        value="{{ valor_base_sugerido|default:'' }}"
+                        placeholder="Ex: 1320.00">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label form-label-sm fw-semibold">Ano Base</label>
+                    <select name="ano_base_reajuste" id="anoBase" class="form-select form-select-sm">
+                        <option value="">Selecione...</option>
+                        {% for r in reajustes_json|default:'' %}{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label form-label-sm fw-semibold">Valor Atual Pago (R$)</label>
+                    <input type="number" id="valorAtual" step="0.01"
+                        class="form-control form-control-sm"
+                        value="{{ valor_atual_sugerido|default:'' }}"
+                        placeholder="Valor pago na folha">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="calcularReajuste()">
+                        <i class="bi bi-calculator me-1"></i>Calcular
+                    </button>
+                </div>
+            </div>
+
+            <div id="tabelaReajuste" class="table-responsive" style="display:none;">
+                <table class="table table-bordered table-sm">
+                    <thead style="background:#1a3a5c; color:white;">
+                        <tr>
+                            <th>Ano</th>
+                            <th class="text-end">% Reajuste</th>
+                            <th class="text-end">Sal. Mínimo</th>
+                            <th class="text-end">Teto INSS</th>
+                            <th class="text-end">Valor Esperado</th>
+                            <th class="text-end">Valor Real</th>
+                            <th class="text-center">Situação</th>
+                            <th>Base Legal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reajusteBody"></tbody>
+                    <tfoot>
+                        <tr class="table-light fw-bold">
+                            <td colspan="4">Valor esperado acumulado:</td>
+                            <td class="text-end" id="totalEsperado">-</td>
+                            <td class="text-end" id="totalReal">-</td>
+                            <td colspan="2" id="totalSituacao"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <div id="alertaReajuste" class="mt-2"></div>
+            </div>
+            {% endif %}
+
+        </form>
+    </div>
+</div>
+
+<!-- Folha -->
+{% elif aba_ativa == 'folha' %}
+<div class="card card-stat">
+    <div class="card-body">
+        <h6 class="fw-semibold mb-3">Conferência de Folha de Pagamento</h6>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="aba" value="folha">
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Valor Concedido (R$)</label>
+                    <input type="number" name="valor_concedido" step="0.01" value="{{ folha.valor_concedido|default:'' }}" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Valor Pago na Folha (R$)</label>
+                    <input type="number" name="valor_pago_folha" step="0.01" value="{{ folha.valor_pago_folha|default:'' }}" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Tipo de Divergência</label>
+                    <select name="tipo_divergencia" class="form-select form-select-sm">
+                        {% for val, label in tipo_divergencia_choices %}
+                        <option value="{{ val }}" {% if folha and folha.tipo_divergencia == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Impacto Financeiro (R$)</label>
+                    <input type="number" name="impacto_financeiro_estimado" step="0.01" value="{{ folha.impacto_financeiro_estimado|default:'' }}" class="form-control form-control-sm">
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 35%">Item de Verificação</th>
+                            <th style="width: 15%">Resultado</th>
+                            <th>Observações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in folha_rows %}
+                        <tr>
+                            <td class="fw-semibold small">{{ row.label }}</td>
+                            <td>
+                                <select name="{{ row.field_ok }}" class="form-select form-select-sm">
+                                    <option value="">-</option>
+                                    <option value="true" {% if row.value_ok == True %}selected{% endif %}>Conforme</option>
+                                    <option value="false" {% if row.value_ok == False %}selected{% endif %}>Não Conforme</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" name="{{ row.field_obs }}" value="{{ row.value_obs }}" class="form-control form-control-sm" placeholder="Observações...">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="row align-items-end mt-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Resultado Geral</label>
+                    <select name="resultado" class="form-select">
+                        {% for val, label in resultado_choices %}
+                        <option value="{{ val }}" {% if folha and folha.resultado == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-auto">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Conferência de Folha
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Nota Técnica -->
+{% elif aba_ativa == 'nota_tecnica' %}
+<div class="row g-3">
+    <div class="col-12">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-semibold mb-0">Nota Técnica de Auditoria</h6>
+                    <a href="{% url 'analise:nota_tecnica_pdf' processo.pk %}" class="btn btn-danger btn-sm" target="_blank">
+                        <i class="bi bi-file-earmark-pdf me-1"></i>Gerar PDF
+                    </a>
+                </div>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="aba" value="nota_tecnica">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Análise Técnica Narrativa</label>
+                        <small class="text-muted d-block mb-1">Descreva o resultado técnico do processo, fundamentação normativa e conclusões do auditor.</small>
+                        <textarea name="texto" class="form-control" rows="10" placeholder="Ex: O presente processo refere-se à concessão de aposentadoria voluntária...">{{ nota_tecnica.texto|default:'' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-danger">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Limitações Técnicas (cláusula 12.4)
+                        </label>
+                        <small class="text-muted d-block mb-1">Registre ausência ou insuficiência de documentos essenciais que limitaram a análise.</small>
+                        <textarea name="limitacao_documental" class="form-control border-danger" rows="4"
+                            placeholder="Ex: Não foi disponibilizado o histórico contributivo completo. A análise do tempo de contribuição ficou prejudicada...">{{ nota_tecnica.limitacao_documental|default:'' }}</textarea>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-check-lg me-1"></i>Salvar Nota Técnica
+                        </button>
+                        {% if nota_tecnica %}
+                        <small class="text-muted">Última atualização: {{ nota_tecnica.data_atualizacao|date:"d/m/Y H:i" }}</small>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Achados -->
+{% elif aba_ativa == 'achados' %}
+<div class="row g-3">
+    <div class="col-md-5">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3">Registrar Achado</h6>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="aba" value="achados">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Classificação</label>
+                        <select name="classificacao" class="form-select form-select-sm" required>
+                            {% for val, label in classificacao_choices %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Descrição do Achado</label>
+                        <textarea name="descricao" class="form-control form-control-sm" rows="4" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Normas Aplicáveis</label>
+                        <input type="text" name="normas_aplicaveis" class="form-control form-control-sm" placeholder="Ex: Art. 40 CF/88, EC 103/2019...">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Impacto Financeiro (R$)</label>
+                        <input type="number" name="impacto_financeiro" step="0.01" class="form-control form-control-sm">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Recomendação</label>
+                        <textarea name="recomendacao" class="form-control form-control-sm" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 btn-sm">
+                        <i class="bi bi-plus-lg me-1"></i>Registrar Achado
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-7">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3">Achados Registrados</h6>
+                {% for achado in processo.achados.all %}
+                <div class="border rounded p-3 mb-2">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span class="badge badge-{{ achado.classificacao|lower }}">{{ achado.get_classificacao_display }}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <small class="text-muted">{{ achado.data_registro|date:"d/m/Y" }}</small>
+                            <a href="{% url 'analise:excluir_achado' achado.pk %}" class="text-danger small" onclick="return confirm('Excluir achado?')">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="mb-1 small">{{ achado.descricao }}</p>
+                    {% if achado.normas_aplicaveis %}
+                    <small class="text-muted d-block"><strong>Normas:</strong> {{ achado.normas_aplicaveis }}</small>
+                    {% endif %}
+                    {% if achado.impacto_financeiro %}
+                    <small class="text-muted d-block"><strong>Impacto:</strong> R$ {{ achado.impacto_financeiro }}</small>
+                    {% endif %}
+                    {% if achado.recomendacao %}
+                    <small class="text-muted d-block"><strong>Recomendação:</strong> {{ achado.recomendacao }}</small>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <p class="text-muted small text-center py-4">Nenhum achado registrado.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const PROCESSO_PK = {{ processo.pk }};
+const TIPO_BENEFICIO = "{{ processo.tipo_beneficio }}";
+const API_REGRAS = "{% url 'institutos:api_regras' %}";
+const API_PRE_ANALISE = `/analise/${PROCESSO_PK}/pre-analise/`;
+
+const selInstituto = document.getElementById('sel-instituto');
+const btnAnalisar = document.getElementById('btn-analisar');
+const infoRegra = document.getElementById('info-regra');
+const txtRegra = document.getElementById('txt-regra');
+
+let regraAtualId = null;
+
+selInstituto.addEventListener('change', async () => {
+    const id = selInstituto.value;
+    btnAnalisar.disabled = true;
+    regraAtualId = null;
+    infoRegra.style.display = 'none';
+    if (!id) return;
+
+    const resp = await fetch(`${API_REGRAS}?instituto_id=${id}&tipo_beneficio=${TIPO_BENEFICIO}`);
+    const data = await resp.json();
+
+    if (data.regras.length === 0) {
+        txtRegra.textContent = 'Nenhuma regra ativa encontrada para este tipo de benefício neste instituto.';
+        infoRegra.style.display = '';
+        return;
+    }
+    // Usa automaticamente a primeira regra (mais recente, por ordering do model)
+    regraAtualId = data.regras[0].id;
+    txtRegra.textContent = `Regra carregada: ${data.regras[0].label}`;
+    infoRegra.style.display = '';
+    btnAnalisar.disabled = false;
+});
+
+btnAnalisar.addEventListener('click', async () => {
+    if (!regraAtualId) return;
+    btnAnalisar.disabled = true;
+    btnAnalisar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analisando...';
+
+    try {
+        const resp = await fetch(`${API_PRE_ANALISE}?regra_id=${regraAtualId}`);
+        const data = await resp.json();
+        if (data.erro) { alert(data.erro); return; }
+        aplicarPreAnalise(data);
+    } finally {
+        btnAnalisar.disabled = false;
+        btnAnalisar.innerHTML = '<i class="bi bi-lightning-charge me-1"></i>Analisar Automaticamente';
+    }
+});
+
+function aplicarPreAnalise(data) {
+    let conformes = 0, naoConformes = 0, nulos = 0;
+
+    // ── ELEGIBILIDADE ────────────────────────────────────────────────────────
+    const mapeEleg = {
+        enquadramento_correto: ['enquadramento_correto', 'enquadramento_obs'],
+        requisitos_idade: ['requisitos_idade', 'requisitos_idade_obs'],
+        tempo_contribuicao_ok: ['tempo_contribuicao_ok', 'tempo_contribuicao_obs'],
+        tempo_servico_publico_ok: ['tempo_servico_publico_ok', 'tempo_servico_publico_obs'],
+        tempo_carreira_ok: ['tempo_carreira_ok', 'tempo_carreira_obs'],
+        tempo_no_cargo_ok: ['tempo_no_cargo_ok', 'tempo_no_cargo_obs'],
+        marco_temporal_ok: ['marco_temporal_ok', 'marco_temporal_obs'],
+        condicao_dependente_ok: ['condicao_dependente_ok', 'condicao_dependente_obs'],
+        normas_vigentes_epoca_ok: ['normas_vigentes_epoca_ok', 'normas_vigentes_epoca_obs'],
+    };
+    for (const [chave, [fieldOk, fieldObs]] of Object.entries(mapeEleg)) {
+        const item = data.elegibilidade[chave];
+        if (!item) continue;
+        preencherCampo(fieldOk, item.valor, item.obs);
+        if (item.valor === true) conformes++;
+        else if (item.valor === false) naoConformes++;
+        else nulos++;
+    }
+    preencherResultado('resultado', data.elegibilidade.resultado_sugerido, 'elegibilidade');
+
+    // ── CÁLCULO ──────────────────────────────────────────────────────────────
+    const mapeCalc = {
+        teto_acumulacao_ok: ['teto_acumulacao_ok', 'teto_acumulacao_obs'],
+        media_integralidade_ok: ['media_integralidade_ok', 'media_integralidade_obs'],
+        reajuste_ok: ['reajuste_ok', 'reajuste_obs'],
+    };
+    for (const [chave, [fieldOk, fieldObs]] of Object.entries(mapeCalc)) {
+        const item = data.calculo[chave];
+        if (!item) continue;
+        preencherCampo(fieldOk, item.valor, item.obs);
+        if (item.valor === true) conformes++;
+        else if (item.valor === false) naoConformes++;
+        else nulos++;
+    }
+    preencherResultado('resultado', data.calculo.resultado_sugerido, 'calculo');
+
+    // ── CÁLCULO — regime de reajuste ─────────────────────────────────────────
+    if (data.calculo.regime_compativel) {
+        const item = data.calculo.regime_compativel;
+        if (item.obs) {
+            const alertDiv = document.getElementById('alertaRegime');
+            if (alertDiv) {
+                alertDiv.innerHTML = item.valor
+                    ? `<div class="alert alert-info py-2"><i class="bi bi-info-circle me-2"></i>${item.obs}</div>`
+                    : `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-2"></i>${item.obs}</div>`;
+            }
+        }
+    }
+
+    // ── FOLHA ────────────────────────────────────────────────────────────────
+    const folha = data.folha;
+    preencherResultado('resultado', folha.resultado_sugerido, 'folha');
+    const selDiv = document.querySelector('select[name="tipo_divergencia"]');
+    if (selDiv) { selDiv.value = folha.tipo_divergencia; selDiv.classList.add('auto-filled'); }
+
+    // Resumo
+    document.getElementById('resumo-auto').style.display = '';
+    document.getElementById('msg-conformes').textContent = `✅ ${conformes} conforme${conformes !== 1 ? 's' : ''}`;
+    document.getElementById('msg-nao-conformes').textContent = `❌ ${naoConformes} não conforme${naoConformes !== 1 ? 's' : ''}`;
+    document.getElementById('msg-nulos').textContent = nulos ? `⚪ ${nulos} sem dados` : '';
+}
+
+// Map from ok-field → obs-field
+const OBS_MAP = {
+    enquadramento_correto: 'enquadramento_obs',
+    requisitos_idade: 'requisitos_idade_obs',
+    tempo_contribuicao_ok: 'tempo_contribuicao_obs',
+    tempo_servico_publico_ok: 'tempo_servico_publico_obs',
+    tempo_carreira_ok: 'tempo_carreira_obs',
+    tempo_no_cargo_ok: 'tempo_no_cargo_obs',
+    marco_temporal_ok: 'marco_temporal_obs',
+    condicao_dependente_ok: 'condicao_dependente_obs',
+    normas_vigentes_epoca_ok: 'normas_vigentes_epoca_obs',
+    carreira_cargo_ok: 'carreira_cargo_obs',
+    teto_acumulacao_ok: 'teto_acumulacao_obs',
+    media_integralidade_ok: 'media_integralidade_obs',
+    reajuste_ok: 'reajuste_obs',
+    redutor_ok: 'redutor_obs',
+};
+
+function preencherCampo(fieldOk, valor, obs) {
+    const sel = document.querySelector(`select[name="${fieldOk}"]`);
+    if (sel) {
+        if (valor === true) sel.value = 'true';
+        else if (valor === false) sel.value = 'false';
+        else sel.value = '';
+        sel.classList.add('auto-filled');
+    }
+    const obsField = OBS_MAP[fieldOk];
+    if (obsField && obs) {
+        const inp = document.querySelector(`input[name="${obsField}"], textarea[name="${obsField}"]`);
+        if (inp) { inp.value = obs; inp.classList.add('auto-filled-obs'); }
+    }
+}
+
+function preencherResultado(fieldName, valor, abaAtiva) {
+    // Só preenche se a aba estiver visível
+    const sel = document.querySelector(`select[name="${fieldName}"]`);
+    if (!sel) return;
+    const map = {'CONFORME': 'CONFORME', 'NAO_CONFORME': 'NAO_CONFORME', 'RESSALVAS': 'RESSALVAS', 'INDETERMINADO': 'INDETERMINADO'};
+    if (map[valor]) sel.value = map[valor];
+    sel.classList.add('auto-filled');
+}
+
+// ── MÉTODO DE REAJUSTE — toggle campos condicionais ──────────────────────────
+(function() {
+    const sel = document.getElementById('metodoReajuste');
+    if (!sel) return;
+    function atualizar() {
+        const v = sel.value;
+        const cargoPar = document.getElementById('campoCargoPar');
+        const indiceINSS = document.getElementById('campoIndiceINSS');
+        if (!cargoPar || !indiceINSS) return;
+        if (v === 'PARIDADE_MUNICIPAL') {
+            cargoPar.style.opacity = '1';
+            indiceINSS.style.opacity = '0.4';
+        } else if (v === 'INDICE_INSS') {
+            cargoPar.style.opacity = '0.4';
+            indiceINSS.style.opacity = '1';
+        } else {
+            cargoPar.style.opacity = '1';
+            indiceINSS.style.opacity = '1';
+        }
+    }
+    sel.addEventListener('change', atualizar);
+    atualizar();
+})();
+
+// ── CALCULADORA DE REAJUSTE ──────────────────────────────────────────────────
+const REAJUSTE_DATA = {{ reajustes_json|safe }};
+const ANO_BASE_SUGERIDO = {{ ano_base_sugerido|default:"null" }};
+
+// Popula o select de ano base via JS (evita problema de locale nos valores)
+(function() {
+    const sel = document.getElementById('anoBase');
+    if (!sel) return;
+    REAJUSTE_DATA.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.ano;
+        opt.textContent = r.ano;
+        if (r.ano === ANO_BASE_SUGERIDO) opt.selected = true;
+        sel.appendChild(opt);
+    });
+})();
+
+function fmt(v) {
+    return 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function calcularReajuste() {
+    const valorBaseStr = document.getElementById('valorBase').value.replace(',','.');
+    const anoBaseStr   = document.getElementById('anoBase').value;
+    const valorAtualStr = document.getElementById('valorAtual').value.replace(',','.');
+
+    const valorBase  = parseFloat(valorBaseStr);
+    const anoBase    = parseInt(anoBaseStr);
+    const temAtual   = valorAtualStr !== '';
+    const valorAtual = temAtual ? parseFloat(valorAtualStr) : null;
+
+    if (!valorBase || isNaN(valorBase) || !anoBase || isNaN(anoBase)) {
+        alert('Informe o valor na concessão e o ano base.');
+        return;
+    }
+
+    const tabela = document.getElementById('tabelaReajuste');
+    const tbody  = document.getElementById('reajusteBody');
+    tabela.style.display = '';
+    tbody.innerHTML = '';
+
+    // Inclui o próprio ano base + todos os posteriores para mostrar a progressão
+    const anos = REAJUSTE_DATA.filter(r => r.ano > anoBase);
+
+    if (anos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Nenhum reajuste cadastrado após o ano base selecionado.</td></tr>';
+        document.getElementById('totalEsperado').textContent = fmt(valorBase);
+        document.getElementById('totalReal').textContent = temAtual ? fmt(valorAtual) : '-';
+        document.getElementById('totalSituacao').innerHTML = '';
+        document.getElementById('alertaReajuste').innerHTML =
+            '<div class="alert alert-warning py-2">Cadastre reajustes para anos posteriores a ' + anoBase + ' na tabela de Reajuste INSS.</div>';
+        return;
+    }
+
+    let valorEsperado = valorBase;
+
+    anos.forEach(r => {
+        const pct = r.pct / 100;
+        valorEsperado = valorEsperado * (1 + pct);
+        if (valorEsperado < r.sm) valorEsperado = r.sm; // piso salário mínimo
+
+        const diff = temAtual ? (valorAtual - valorEsperado) : null;
+        const conforme = diff !== null ? Math.abs(diff) <= 1.00 : null;
+
+        let badge = '<span class="badge bg-secondary">-</span>';
+        if (conforme === true)  badge = '<span class="badge bg-success">Conforme</span>';
+        if (conforme === false) badge = `<span class="badge bg-danger">Dif: ${fmt(diff)}</span>`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="fw-bold">${r.ano}</td>
+            <td class="text-end">${Number(r.pct).toFixed(2)}%</td>
+            <td class="text-end">${fmt(r.sm)}</td>
+            <td class="text-end">${fmt(r.teto)}</td>
+            <td class="text-end fw-bold text-primary">${fmt(valorEsperado)}</td>
+            <td class="text-end">${temAtual ? fmt(valorAtual) : '-'}</td>
+            <td class="text-center">${badge}</td>
+            <td><small class="text-muted">${r.legal}</small></td>`;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById('totalEsperado').textContent = fmt(valorEsperado);
+    document.getElementById('totalReal').textContent = temAtual ? fmt(valorAtual) : '-';
+
+    const diffTotal = temAtual ? (valorAtual - valorEsperado) : null;
+    const alertDiv  = document.getElementById('alertaReajuste');
+
+    if (diffTotal !== null) {
+        const ok = Math.abs(diffTotal) <= 1.00;
+        alertDiv.innerHTML = ok
+            ? `<div class="alert alert-success py-2"><i class="bi bi-check-circle me-2"></i><strong>Reajuste conforme.</strong> Valor esperado: ${fmt(valorEsperado)} | Valor real: ${fmt(valorAtual)}</div>`
+            : `<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle me-2"></i><strong>Divergência de ${fmt(diffTotal)}.</strong> Esperado: ${fmt(valorEsperado)} | Real: ${fmt(valorAtual)}</div>`;
+
+        const selReajuste = document.querySelector('select[name="reajuste_ok"]');
+        if (selReajuste) selReajuste.value = ok ? 'true' : 'false';
+
+        const obsReajuste = document.querySelector('input[name="reajuste_obs"]');
+        if (obsReajuste && !obsReajuste.value) {
+            obsReajuste.value = ok
+                ? `Reajuste conforme. Acumulado de ${anoBase} a ${anos[anos.length-1].ano}: valor esperado ${fmt(valorEsperado)}, pago ${fmt(valorAtual)}.`
+                : `Divergência de ${fmt(diffTotal)}. Valor esperado acumulado: ${fmt(valorEsperado)}, pago: ${fmt(valorAtual)}.`;
+        }
+        document.getElementById('totalSituacao').innerHTML =
+            ok ? '<span class="badge bg-success">Conforme</span>' : '<span class="badge bg-danger">Divergente</span>';
+    } else {
+        alertDiv.innerHTML = '<div class="alert alert-info py-2"><i class="bi bi-info-circle me-2"></i>Informe o <strong>Valor Atual Pago</strong> para verificar a conformidade.</div>';
+        document.getElementById('totalSituacao').innerHTML = '';
+    }
+}
+
+// Recalcula automaticamente se já há valores salvos
+document.addEventListener('DOMContentLoaded', () => {
+    const vb = document.getElementById('valorBase');
+    const ab = document.getElementById('anoBase');
+    if (vb && ab && vb.value && ab.value) calcularReajuste();
+});
+</script>
+{% endblock %}

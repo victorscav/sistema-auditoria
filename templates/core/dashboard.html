@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Auditoria RPPS{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item active">Dashboard</li>
+{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-bold">Dashboard</h4>
+    <small class="text-muted">Auditoria RPPS - Sistema de Gestão Previdenciária</small>
+</div>
+
+<!-- Cards de estatísticas -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small mb-1">Total de Processos</div>
+                        <div class="fs-3 fw-bold">{{ total_processos }}</div>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 rounded-3 p-3">
+                        <i class="bi bi-folder2-open text-primary fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small mb-1">Analisados</div>
+                        <div class="fs-3 fw-bold">{{ total_analisados }}</div>
+                    </div>
+                    <div class="bg-success bg-opacity-10 rounded-3 p-3">
+                        <i class="bi bi-check2-circle text-success fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small mb-1">Pendentes</div>
+                        <div class="fs-3 fw-bold">{{ total_pendentes }}</div>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 rounded-3 p-3">
+                        <i class="bi bi-clock-history text-warning fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted small mb-1">Não Conformes</div>
+                        <div class="fs-3 fw-bold text-danger">{{ total_nao_conformes }}</div>
+                    </div>
+                    <div class="bg-danger bg-opacity-10 rounded-3 p-3">
+                        <i class="bi bi-exclamation-triangle text-danger fs-4"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- Gráfico por tipo de benefício -->
+    <div class="col-lg-7">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="card-title fw-semibold mb-3">Processos por Tipo de Benefício</h6>
+                <canvas id="graficoBeneficio" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status de conformidade -->
+    <div class="col-lg-5">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="card-title fw-semibold mb-3">Status de Conformidade</h6>
+                <canvas id="graficoConformidade" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lotes ativos e últimos processos -->
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="card-title fw-semibold mb-0">Lotes Ativos</h6>
+                    <a href="{% url 'processos:lotes' %}" class="btn btn-sm btn-outline-primary">Ver todos</a>
+                </div>
+                {% if lotes_ativos %}
+                    {% for lote in lotes_ativos %}
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="fw-semibold">{{ lote.numero }}</small>
+                            <small class="text-muted">{{ lote.percentual_conclusao }}%</small>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar" role="progressbar" style="width: {{ lote.percentual_conclusao }}%"></div>
+                        </div>
+                        <small class="text-muted">{{ lote.processos_concluidos }}/{{ lote.total_processos }} processos</small>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted small">Nenhum lote ativo.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="card-title fw-semibold mb-0">Últimos Processos</h6>
+                    <a href="{% url 'processos:lista' %}" class="btn btn-sm btn-outline-primary">Ver todos</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Processo</th>
+                                <th>Beneficiário</th>
+                                <th>Tipo</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for processo in ultimos_processos %}
+                            <tr>
+                                <td><a href="{% url 'processos:detalhe' processo.pk %}" class="text-decoration-none">{{ processo.numero }}</a></td>
+                                <td class="text-truncate" style="max-width: 150px;">{{ processo.beneficiario.nome }}</td>
+                                <td><small>{{ processo.get_tipo_beneficio_display }}</small></td>
+                                <td>
+                                    <span class="badge badge-{{ processo.status_processo|lower }}">
+                                        {{ processo.get_status_processo_display }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-muted text-center py-3">Nenhum processo cadastrado.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const dadosBeneficio = {{ dados_grafico_beneficio|safe }};
+const dadosConformidade = {{ dados_grafico_conformidade|safe }};
+
+new Chart(document.getElementById('graficoBeneficio'), {
+    type: 'bar',
+    data: {
+        labels: dadosBeneficio.labels,
+        datasets: [{
+            label: 'Processos',
+            data: dadosBeneficio.values,
+            backgroundColor: ['#0d6efd','#198754','#fd7e14','#dc3545','#6610f2'],
+            borderRadius: 6,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+});
+
+new Chart(document.getElementById('graficoConformidade'), {
+    type: 'doughnut',
+    data: {
+        labels: dadosConformidade.labels,
+        datasets: [{
+            data: dadosConformidade.values,
+            backgroundColor: ['#198754','#fd7e14','#dc3545','#6c757d'],
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } }
+    }
+});
+</script>
+{% endblock %}
