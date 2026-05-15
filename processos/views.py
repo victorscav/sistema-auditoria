@@ -8,8 +8,9 @@ from django.http import HttpResponse
 from .models import (Processo, Beneficiario, DadosBeneficio, Lote, TipoBeneficio,
                       StatusProcesso, StatusLote, ReajusteINSS, ContrachequeAuditoria,
                       RegimeReajuste, CertidaoTempoContribuicao, OrigemTempo,
-                      ContribuicaoPrevidenciaria, _dias_para_amd)
-from .pdf_extractor import processar_pdfs
+                      ContribuicaoPrevidenciaria, DocumentoProcesso, TipoDocumento,
+                      _dias_para_amd)
+from .pdf_extractor import processar_pdfs, extrair_dados_contracheque
 from .excel_utils import gerar_planilha_padronizada, ler_planilha_padronizada
 
 
@@ -17,12 +18,15 @@ def _parse_date_field(value):
     if not value:
         return None
     value = str(value).strip()
-    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
+    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S'):
         try:
             return datetime.strptime(value, fmt).date()
         except ValueError:
             continue
-    return None
+    try:
+        return datetime.fromisoformat(value).date()
+    except (ValueError, TypeError):
+        return None
 
 
 def lista_processos(request):
@@ -79,6 +83,8 @@ def detalhe_processo(request, pk):
     media_simples = processo.media_contribuicoes_simples()
     media_80 = processo.media_contribuicoes_80()
 
+    documentos = processo.documentos.all()
+
     return render(request, 'processos/detalhe.html', {
         'processo': processo,
         'contracheque': contracheque,
@@ -94,6 +100,8 @@ def detalhe_processo(request, pk):
         'contribuicoes': contribuicoes,
         'media_simples': media_simples,
         'media_80': media_80,
+        'documentos': documentos,
+        'tipo_documento_choices': TipoDocumento.choices,
     })
 
 
@@ -181,6 +189,9 @@ def _build_form_fields(beneficiario=None, processo=None, dados=None):
         {'label': 'Valor Pago na Folha (R$)', 'html': _make_input('number', 'valor_pago_folha', dados.valor_pago_folha if dados else '', 'step="0.01"')},
         {'label': 'Tempo de Contribuicao', 'html': _make_input('text', 'tempo_contribuicao', dados.tempo_contribuicao if dados else '')},
         {'label': 'Tempo de Servico Publico', 'html': _make_input('text', 'tempo_servico_publico', dados.tempo_servico_publico if dados else '')},
+        {'label': 'Tempo de Carreira', 'html': _make_input('text', 'tempo_carreira', dados.tempo_carreira if dados else '', 'placeholder="Ex: 10 anos e 3 meses"')},
+        {'label': 'Tempo no Cargo', 'html': _make_input('text', 'tempo_no_cargo', dados.tempo_no_cargo if dados else '', 'placeholder="Ex: 5 anos e 1 mes"')},
+        {'label': 'Marco Temporal de Ingresso', 'html': _make_input('date', 'marco_temporal_ingresso', dados.marco_temporal_ingresso if dados else '')},
         {'label': 'Idade na Concessao', 'html': _make_input('number', 'idade_concessao', dados.idade_concessao if dados else '')},
         {'label': 'Regra Aplicada', 'html': _make_input('text', 'regra_aplicada', dados.regra_aplicada if dados else '')},
         {'label': 'Regime de Reajuste', 'html': _make_select('regime_reajuste', RegimeReajuste.choices, regime_atual)},
@@ -240,6 +251,9 @@ def _salvar_processo_from_post(request, processo_existente=None):
             'valor_pago_folha': request.POST.get('valor_pago_folha') or None,
             'tempo_contribuicao': request.POST.get('tempo_contribuicao', ''),
             'tempo_servico_publico': request.POST.get('tempo_servico_publico', ''),
+            'tempo_carreira': request.POST.get('tempo_carreira', ''),
+            'tempo_no_cargo': request.POST.get('tempo_no_cargo', ''),
+            'marco_temporal_ingresso': _parse_date_field(request.POST.get('marco_temporal_ingresso')),
             'idade_concessao': request.POST.get('idade_concessao') or None,
             'regra_aplicada': request.POST.get('regra_aplicada', ''),
             'regime_reajuste': request.POST.get('regime_reajuste', 'NAO_DEFINIDO'),
@@ -318,6 +332,8 @@ def importar_planilha(request):
     if request.method == 'POST':
         planilha = request.FILES.get('planilha')
         lote_id = request.POST.get('lote') or None
+        contracheque_ativo   = request.FILES.get('contracheque_ativo')
+        contracheque_inativo = request.FILES.get('contracheque_inativo')
 
         if not planilha:
             messages.error(request, 'Nenhuma planilha enviada.')
@@ -334,12 +350,63 @@ def importar_planilha(request):
 
             tipos_validos = [t[0] for t in TipoBeneficio.choices]
 
+            # Normaliza tipos vindos da planilha (hífens → underscores + aliases longos)
+            TIPO_ALIAS = {
+                'APOS_VOLUNTARIA_POR_IDADE_COM_PROVENTOS_PROPORCIONAIS': 'APOS_VOLUNTARIA_PROP_IDADE',
+                'APOS_VOLUNTARIA_POR_IDADE_E_TEMPO_DE_CONTRIBUICAO':     'APOS_VOLUNTARIA_IDADE_TC',
+                'APOS_VOLUNTARIA_POR_IDADE_E_TEMPO_DE_CONTRIBUI\u00c7\u00c3O': 'APOS_VOLUNTARIA_IDADE_TC',
+            }
+
+            def normalizar_tipo(raw):
+                t = str(raw).strip().upper().replace('-', '_')
+                return TIPO_ALIAS.get(t, t)
+
+            def safe_decimal(val):
+                if not val:
+                    return None
+                try:
+                    v = str(val).replace(',', '.').strip()
+                    float(v)
+                    return v
+                except Exception:
+                    return None
+
+            def safe_int(val):
+                if not val:
+                    return None
+                try:
+                    return int(str(val).split('.')[0])
+                except Exception:
+                    return None
+
+            def safe_date(val):
+                if not val:
+                    return None
+                from datetime import date, datetime
+                if isinstance(val, date):
+                    return val
+                try:
+                    return datetime.strptime(str(val).strip(), '%d/%m/%Y').date()
+                except ValueError:
+                    pass
+                try:
+                    return datetime.fromisoformat(str(val).strip()).date()
+                except ValueError:
+                    return None
+
+            def _limpar_nome(nome):
+                """Remove preposições/artigos soltos no início do nome extraído."""
+                import re as _re
+                nome = nome.strip()
+                nome = _re.sub(r'^[a-záéíóúãõâêîôû]{1,3}\s+', '', nome, flags=_re.IGNORECASE)
+                return nome.strip()
+
             for reg in registros:
                 linha = reg['linha']
                 dados = reg['dados']
                 try:
                     cpf = dados['cpf'].strip()
-                    nome = dados['nome_beneficiario'].strip()
+                    nome = _limpar_nome(dados['nome_beneficiario'])
                     numero = dados['numero_processo'].strip() or f'IMP-{cpf[:9]}'
 
                     beneficiario, _ = Beneficiario.objects.get_or_create(cpf=cpf, defaults={'nome': nome})
@@ -349,17 +416,20 @@ def importar_planilha(request):
                     beneficiario.cargo = dados.get('cargo', '') or beneficiario.cargo
                     beneficiario.save()
 
-                    tipo = dados.get('tipo_beneficio', '').strip().upper()
+                    tipo = normalizar_tipo(dados.get('tipo_beneficio', ''))
                     if tipo not in tipos_validos:
                         tipo = 'APOS_VOLUNTARIA'
+
+                    data_concessao_val = _parse_date_field(dados.get('data_concessao'))
+                    data_publicacao_val = _parse_date_field(dados.get('data_publicacao'))
 
                     processo, created = Processo.objects.get_or_create(
                         numero=numero,
                         defaults={
                             'beneficiario': beneficiario,
                             'tipo_beneficio': tipo,
-                            'data_concessao': _parse_date_field(dados.get('data_concessao')),
-                            'data_publicacao': _parse_date_field(dados.get('data_publicacao')),
+                            'data_concessao': data_concessao_val,
+                            'data_publicacao': data_publicacao_val,
                             'lote_id': lote_id,
                             'observacoes': dados.get('observacoes', ''),
                         }
@@ -369,39 +439,28 @@ def importar_planilha(request):
                         criados += 1
                     else:
                         atualizados += 1
+                        # Atualiza datas caso estejam nulas (podem ter sido importadas antes da correção)
+                        update_fields = {}
+                        if data_concessao_val and not processo.data_concessao:
+                            update_fields['data_concessao'] = data_concessao_val
+                        if data_publicacao_val and not processo.data_publicacao:
+                            update_fields['data_publicacao'] = data_publicacao_val
+                        if update_fields:
+                            Processo.objects.filter(pk=processo.pk).update(**update_fields)
 
-                    def safe_decimal(val):
-                        if not val:
-                            return None
-                        try:
-                            v = str(val).replace(',', '.').strip()
-                            float(v)
-                            return v
-                        except Exception:
-                            return None
+                    regimes_validos = [r[0] for r in RegimeReajuste.choices]
+                    regime = dados.get('regime_reajuste', '').strip().upper()
+                    if regime not in regimes_validos:
+                        regime = RegimeReajuste.NAO_DEFINIDO
 
-                    def safe_int(val):
-                        if not val:
-                            return None
-                        try:
-                            return int(str(val).split('.')[0])
-                        except Exception:
-                            return None
-
-                    def safe_date(val):
-                        if not val:
-                            return None
-                        from datetime import date, datetime
-                        if isinstance(val, date):
-                            return val
-                        try:
-                            return datetime.strptime(str(val).strip(), '%d/%m/%Y').date()
-                        except ValueError:
-                            pass
-                        try:
-                            return datetime.fromisoformat(str(val).strip()).date()
-                        except ValueError:
-                            return None
+                    # X na média indica paridade — não há média calculada
+                    raw_media = dados.get('media_contribuicoes', '')
+                    if str(raw_media).strip().upper() == 'X':
+                        media_val = None
+                        if regime == RegimeReajuste.NAO_DEFINIDO:
+                            regime = RegimeReajuste.PARIDADE
+                    else:
+                        media_val = safe_decimal(raw_media)
 
                     DadosBeneficio.objects.update_or_create(
                         processo=processo,
@@ -414,15 +473,99 @@ def importar_planilha(request):
                             'tempo_carreira': dados.get('tempo_carreira', ''),
                             'tempo_no_cargo': dados.get('tempo_no_cargo', ''),
                             'marco_temporal_ingresso': safe_date(dados.get('marco_temporal_ingresso')),
-                            'media_contribuicoes': safe_decimal(dados.get('media_contribuicoes')),
+                            'media_contribuicoes': media_val,
                             'proporcionalidade_percentual': safe_decimal(dados.get('proporcionalidade_percentual')),
                             'idade_concessao': safe_int(dados.get('idade_concessao')),
                             'regra_aplicada': dados.get('regra_aplicada', ''),
+                            'regime_reajuste': regime,
                         }
                     )
 
+                    # ── Contracheque: campos digitados na planilha ────────────
+                    dados_contracheque = {}
+
+                    raw_mes = dados.get('contracheque_mes_ref', '')
+                    if isinstance(raw_mes, str):
+                        raw_mes = raw_mes.strip()
+                    if raw_mes:
+                        dados_contracheque['mes_referencia'] = safe_date(raw_mes)
+
+                    v = safe_decimal(dados.get('contracheque_vencimento', ''))
+                    if v:
+                        dados_contracheque['valor_vencimento'] = v
+
+                    v = safe_decimal(dados.get('contracheque_ultima_remuneracao', ''))
+                    if v:
+                        dados_contracheque['ultima_remuneracao_cargo'] = v
+
+                    lei = dados.get('contracheque_lei_reajuste', '')
+                    if isinstance(lei, str):
+                        lei = lei.strip()
+                    if lei:
+                        dados_contracheque['lei_reajuste_municipal'] = lei
+
+                    # Salva somente se a data de referência foi informada
+                    if dados_contracheque.get('mes_referencia'):
+                        ContrachequeAuditoria.objects.update_or_create(
+                            processo=processo,
+                            defaults={k: v for k, v in dados_contracheque.items() if v}
+                        )
+
                 except Exception as e:
                     erros.append({'linha': linha, 'mensagem': str(e)})
+
+            # ── Vincula PDFs de contracheque ao primeiro processo (OCR) ──────
+            if registros and (contracheque_ativo or contracheque_inativo):
+                primeiro_dados = registros[0]['dados']
+                primeiro_num = primeiro_dados.get('numero_processo', '').strip()
+                primeiro_cpf = primeiro_dados.get('cpf', '').strip()
+                proc_alvo = None
+                if primeiro_num:
+                    proc_alvo = Processo.objects.filter(numero=primeiro_num).first()
+                if proc_alvo is None and primeiro_cpf:
+                    proc_alvo = Processo.objects.filter(beneficiario__cpf=primeiro_cpf).order_by('-data_cadastro').first()
+
+                if proc_alvo:
+                    def _ocr_contracheque(uploaded_file, tipo_str):
+                        try:
+                            import pytesseract, os as _os
+                            from pdf2image import convert_from_bytes
+                            pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+                            _os.environ['TESSDATA_PREFIX'] = r'C:\Users\vic_s\tessdata'
+                            poppler = r'C:\Users\vic_s\poppler\poppler-24.08.0\Library\bin'
+                            pdf_bytes = uploaded_file.read()
+                            uploaded_file.seek(0)
+                            pages = convert_from_bytes(pdf_bytes, dpi=200, poppler_path=poppler)
+                            texto = pytesseract.image_to_string(pages[0], lang='por')
+                            return extrair_dados_contracheque(texto, tipo=tipo_str)
+                        except Exception:
+                            return {}
+
+                    ocr_dados = {}
+                    if contracheque_ativo:
+                        ocr_dados.update(_ocr_contracheque(contracheque_ativo, 'ATIVO'))
+                        DocumentoProcesso.objects.update_or_create(
+                            processo=proc_alvo,
+                            tipo=TipoDocumento.CONTRACHEQUE_ATIVO,
+                            defaults={'arquivo': contracheque_ativo, 'nome_original': contracheque_ativo.name}
+                        )
+
+                    if contracheque_inativo:
+                        ocr_inativo = _ocr_contracheque(contracheque_inativo, 'INATIVO')
+                        for k in ('mes_referencia', 'valor_vencimento', 'observacoes'):
+                            if ocr_inativo.get(k):
+                                ocr_dados[k] = ocr_inativo[k]
+                        DocumentoProcesso.objects.update_or_create(
+                            processo=proc_alvo,
+                            tipo=TipoDocumento.CONTRACHEQUE_INATIVO,
+                            defaults={'arquivo': contracheque_inativo, 'nome_original': contracheque_inativo.name}
+                        )
+
+                    if ocr_dados.get('mes_referencia'):
+                        ContrachequeAuditoria.objects.update_or_create(
+                            processo=proc_alvo,
+                            defaults={k: v for k, v in ocr_dados.items() if v}
+                        )
 
             resultado = {
                 'tipo': 'success' if not erros else 'warning',
@@ -462,7 +605,7 @@ def download_planilha_exemplo(request):
             'marco_temporal_ingresso': '12/03/1989',
             'media_contribuicoes': '8320.45',
             'idade_concessao': '60',
-            'observacoes': 'Aposentadoria voluntária por tempo de contribuição. Regra de transição EC 103/2019.',
+            'observacoes': 'Aposentadoria voluntária por idade e tempo de contribuição. Regra de transição EC 103/2019.',
         },
         {
             'numero_processo': 'RPPS-2024-002',
@@ -677,6 +820,43 @@ def contribuicoes_processo(request, pk):
             obj.save()
 
         messages.success(request, 'Contribuição registrada.' if created else 'Contribuição atualizada.')
+        return redirect('processos:detalhe', pk=pk)
+
+    return redirect('processos:detalhe', pk=pk)
+
+
+def documentos_processo(request, pk):
+    """Upload e exclusão de documentos (contracheques, etc.) vinculados a um processo."""
+    processo = get_object_or_404(Processo, pk=pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'excluir':
+            doc_pk = request.POST.get('doc_pk')
+            doc = DocumentoProcesso.objects.filter(pk=doc_pk, processo=processo).first()
+            if doc:
+                doc.arquivo.delete(save=False)
+                doc.delete()
+                messages.success(request, 'Documento removido.')
+            return redirect('processos:detalhe', pk=pk)
+
+        # action == 'adicionar'
+        arquivo = request.FILES.get('arquivo')
+        tipo    = request.POST.get('tipo', TipoDocumento.OUTRO)
+        if not arquivo:
+            messages.error(request, 'Nenhum arquivo enviado.')
+            return redirect('processos:detalhe', pk=pk)
+
+        DocumentoProcesso.objects.update_or_create(
+            processo=processo,
+            tipo=tipo,
+            defaults={
+                'arquivo': arquivo,
+                'nome_original': arquivo.name,
+            }
+        )
+        messages.success(request, f'{dict(TipoDocumento.choices).get(tipo, tipo)} salvo com sucesso.')
         return redirect('processos:detalhe', pk=pk)
 
     return redirect('processos:detalhe', pk=pk)

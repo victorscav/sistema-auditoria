@@ -188,6 +188,48 @@
                     {% endif %}
                 </dl>
 
+                {% with demo=contracheque.get_demonstrativo %}
+                {% if demo %}
+                <hr class="my-2">
+                <small class="text-muted fw-semibold d-block mb-1">Demonstrativo — {{ demo.periodo }}</small>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-1" style="font-size:0.78rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Conta</th>
+                                <th>Descrição</th>
+                                <th class="text-center">Ref.</th>
+                                <th class="text-end text-success">Vencimentos</th>
+                                <th class="text-end text-danger">Descontos</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in demo.rubricas %}
+                            <tr>
+                                <td class="text-muted">{{ r.conta }}</td>
+                                <td>{{ r.descricao }}</td>
+                                <td class="text-center text-muted">{{ r.referencia }}</td>
+                                <td class="text-end">{% if r.vencimento %}R$&nbsp;{{ r.vencimento }}{% endif %}</td>
+                                <td class="text-end text-danger">{% if r.desconto %}R$&nbsp;{{ r.desconto }}{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="fw-semibold table-light">
+                            <tr>
+                                <td colspan="3" class="text-end small">Total Vencimentos / Descontos</td>
+                                <td class="text-end text-success">R$&nbsp;{{ demo.total_vencimentos }}</td>
+                                <td class="text-end text-danger">R$&nbsp;{{ demo.total_descontos }}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="text-end small">Total Líquido</td>
+                                <td class="text-end">R$&nbsp;{{ demo.total_liquido }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% endif %}
+                {% endwith %}
+
                 {% if regime_media and tabelas_inss %}
                 <hr class="my-2">
                 <small class="text-muted fw-semibold d-block mb-1">Tabela de Reajuste INSS (referência)</small>
@@ -481,6 +523,109 @@
         </div>
     </div>
     {% endif %}
+</div>
+
+<!-- ── Documentos do Processo ──────────────────────────────────────────── -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-semibold mb-0">
+                        <i class="bi bi-file-earmark-pdf me-2 text-danger"></i>Documentos Anexados
+                    </h6>
+                    <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalUploadDoc">
+                        <i class="bi bi-upload me-1"></i>Adicionar
+                    </button>
+                </div>
+                {% if documentos %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Arquivo</th>
+                                <th>Upload</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in documentos %}
+                            <tr>
+                                <td>
+                                    {% if doc.tipo == 'CONTRACHEQUE_ATIVO' %}
+                                        <span class="badge bg-success">Contracheque Ativo</span>
+                                    {% elif doc.tipo == 'CONTRACHEQUE_INATIVO' %}
+                                        <span class="badge bg-secondary">Contracheque Inativo</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-dark">{{ doc.get_tipo_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ doc.arquivo.url }}" target="_blank" class="text-decoration-none">
+                                        <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                                        {{ doc.nome_original|default:doc.arquivo.name }}
+                                    </a>
+                                </td>
+                                <td class="text-muted small">{{ doc.data_upload|date:"d/m/Y H:i" }}</td>
+                                <td class="text-end">
+                                    <form method="post" action="{% url 'processos:documentos_processo' processo.pk %}" class="d-inline"
+                                          onsubmit="return confirm('Remover documento?')">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="excluir">
+                                        <input type="hidden" name="doc_pk" value="{{ doc.pk }}">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm py-0">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">Nenhum documento anexado. Use o botão "Adicionar" para incluir contracheques ou outros PDFs.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Upload Documento -->
+<div class="modal fade" id="modalUploadDoc" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title fw-semibold"><i class="bi bi-upload me-2"></i>Adicionar Documento</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'processos:documentos_processo' processo.pk %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="adicionar">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tipo de Documento</label>
+                        <select name="tipo" class="form-select form-select-sm">
+                            {% for val, label in tipo_documento_choices %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Arquivo (PDF)</label>
+                        <input type="file" name="arquivo" accept=".pdf" class="form-control form-control-sm" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-upload me-1"></i>Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- ── Modal Contribuições Previdenciárias ───────────────────────────────── -->

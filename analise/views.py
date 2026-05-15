@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
+from decimal import Decimal
 
 from processos.models import Processo, ReajusteINSS
 from .models import (
@@ -8,6 +9,17 @@ from .models import (
     AchadoAuditoria, ResultadoAnalise, NotaTecnica
 )
 from .auto_analise import executar_pre_analise
+from .utils import calcular_valor_esperado, recalcular_conferencia, gerar_analise_tecnica
+
+
+def _get_subsidio_prefeito(processo):
+    """Retorna subsidio_prefeito do instituto vinculado ao processo.
+    Se o processo não tiver instituto, usa o único ativo disponível."""
+    from institutos.models import Instituto
+    if processo.instituto_id:
+        return processo.instituto.subsidio_prefeito
+    inst = Instituto.objects.filter(ativo=True).order_by('pk').first()
+    return inst.subsidio_prefeito if inst else None
 
 
 def _parse_bool(value):
@@ -93,6 +105,13 @@ def analise(request, processo_pk):
                 'valor_reconstruido_ano': safe_decimal(request.POST.get('valor_reconstruido_ano')),
                 'valor_devido_mes_corrente': safe_decimal(request.POST.get('valor_devido_mes_corrente')),
                 'diferenca_folha': safe_decimal(request.POST.get('diferenca_folha')),
+                'situacao_instituidor_pensao': request.POST.get('situacao_instituidor_pensao', ''),
+                # Acumulação Art. 24 EC 103/2019
+                'houve_acumulacao': _parse_bool(request.POST.get('houve_acumulacao')),
+                'acumulacao_cargos_acumulaveis': _parse_bool(request.POST.get('acumulacao_cargos_acumulaveis')),
+                'acumulacao_valor_total': safe_decimal(request.POST.get('acumulacao_valor_total')),
+                'acumulacao_regular': _parse_bool(request.POST.get('acumulacao_regular')),
+                'acumulacao_obs': request.POST.get('acumulacao_obs', ''),
                 'resultado': request.POST.get('resultado', ResultadoAnalise.INDETERMINADO),
                 'auditor': request.user if request.user.is_authenticated else None,
             }
@@ -105,29 +124,13 @@ def analise(request, processo_pk):
             return redirect(f'{request.path}?aba=calculo')
 
         elif aba == 'folha':
-            def safe_decimal(v):
-                if not v:
-                    return None
-                try:
-                    return float(v.replace(',', '.'))
-                except Exception:
-                    return None
-
-            fields = {
-                'valor_concedido': safe_decimal(request.POST.get('valor_concedido')),
-                'valor_pago_folha': safe_decimal(request.POST.get('valor_pago_folha')),
-                'rubricas_ok': _parse_bool(request.POST.get('rubricas_ok')),
-                'rubricas_obs': request.POST.get('rubricas_obs', ''),
-                'reajuste_aplicado_ok': _parse_bool(request.POST.get('reajuste_aplicado_ok')),
-                'reajuste_aplicado_obs': request.POST.get('reajuste_aplicado_obs', ''),
-                'teto_constitucional_ok': _parse_bool(request.POST.get('teto_constitucional_ok')),
-                'teto_constitucional_obs': request.POST.get('teto_constitucional_obs', ''),
-                'tipo_divergencia': request.POST.get('tipo_divergencia', 'SEM_DIVERGENCIA'),
-                'impacto_financeiro_estimado': safe_decimal(request.POST.get('impacto_financeiro_estimado')),
-                'resultado': request.POST.get('resultado', ResultadoAnalise.INDETERMINADO),
-                'auditor': request.user if request.user.is_authenticated else None,
-            }
-            ConferenciaFolha.objects.update_or_create(processo=processo, defaults=fields)
+            # Apenas resultado e observações são editáveis pelo auditor;
+            # os valores financeiros e a divergência são calculados automaticamente.
+            obj, _ = ConferenciaFolha.objects.get_or_create(processo=processo)
+            obj.resultado    = request.POST.get('resultado', ResultadoAnalise.INDETERMINADO)
+            obj.observacoes  = request.POST.get('observacoes', '')
+            obj.auditor      = request.user if request.user.is_authenticated else None
+            obj.save()
             _atualizar_status_processo(processo)
             messages.success(request, 'Conferência de folha salva.')
             return redirect(f'{request.path}?aba=folha')
@@ -168,6 +171,26 @@ def analise(request, processo_pk):
                 )
                 messages.success(request, 'Achado registrado.')
             return redirect(f'{request.path}?aba=achados')
+
+    dados_beneficio = getattr(processo, 'dados_beneficio', None)
+
+    # ── Conferência de Folha: cálculo automático ─────────────────────────────
+    contracheque_obj = getattr(processo, 'contracheque', None)
+    data_ref_folha   = contracheque_obj.mes_referencia if contracheque_obj else None
+    regime           = dados_beneficio.regime_reajuste if dados_beneficio else None
+
+    valor_esperado, passos_reajuste = calcular_valor_esperado(processo)
+
+    # Fallback para PARIDADE sem leis cadastradas: usa valor manual da aba cálculo
+    if valor_esperado is None and regime == 'PARIDADE':
+        if calculo and calculo.valor_devido_mes_corrente:
+            valor_esperado = Decimal(str(calculo.valor_devido_mes_corrente))
+        elif calculo and calculo.valor_reconstruido_ano:
+            valor_esperado = Decimal(str(calculo.valor_reconstruido_ano))
+
+    # Persiste e recalcula divergência
+    recalcular_conferencia(processo)
+    folha = getattr(processo, 'conferenciafolha', None)
 
     # Monta rows para os formulários de análise
     elegibilidade_rows = [
@@ -210,39 +233,62 @@ def analise(request, processo_pk):
         {'label': 'Marco temporal de ingresso no serviço público',
          'field_ok': 'marco_temporal_ok', 'field_obs': 'marco_temporal_obs',
          'value_ok': elegibilidade.marco_temporal_ok if elegibilidade else None,
-         'value_obs': elegibilidade.marco_temporal_obs if elegibilidade else ''},
+         'value_obs': elegibilidade.marco_temporal_obs if elegibilidade else '',
+         'marco_temporal_ingresso': dados_beneficio.marco_temporal_ingresso if dados_beneficio else None},
     ]
 
-    calculo_rows = [
-        {'label': 'Base de cálculo correta',
-         'field_ok': 'base_calculo_ok', 'field_obs': 'base_calculo_obs',
-         'value_ok': calculo.base_calculo_ok if calculo else None,
-         'value_obs': calculo.base_calculo_obs if calculo else ''},
-        {'label': 'Composição da remuneração correta',
-         'field_ok': 'composicao_remuneracao_ok', 'field_obs': 'composicao_remuneracao_obs',
-         'value_ok': calculo.composicao_remuneracao_ok if calculo else None,
-         'value_obs': calculo.composicao_remuneracao_obs if calculo else ''},
-        {'label': 'Média/integralidade calculada corretamente',
-         'field_ok': 'media_integralidade_ok', 'field_obs': 'media_integralidade_obs',
-         'value_ok': calculo.media_integralidade_ok if calculo else None,
-         'value_obs': calculo.media_integralidade_obs if calculo else ''},
-        {'label': 'Cotas familiares corretas (pensões)',
-         'field_ok': 'cotas_familiares_ok', 'field_obs': 'cotas_familiares_obs',
-         'value_ok': calculo.cotas_familiares_ok if calculo else None,
-         'value_obs': calculo.cotas_familiares_obs if calculo else ''},
-        {'label': 'Teto/acumulação verificado',
-         'field_ok': 'teto_acumulacao_ok', 'field_obs': 'teto_acumulacao_obs',
-         'value_ok': calculo.teto_acumulacao_ok if calculo else None,
-         'value_obs': calculo.teto_acumulacao_obs if calculo else ''},
-        {'label': 'Reajuste aplicado corretamente',
-         'field_ok': 'reajuste_ok', 'field_obs': 'reajuste_obs',
-         'value_ok': calculo.reajuste_ok if calculo else None,
-         'value_obs': calculo.reajuste_obs if calculo else ''},
-        {'label': 'Redutor aplicado corretamente (quando cabível)',
-         'field_ok': 'redutor_ok', 'field_obs': 'redutor_obs',
-         'value_ok': calculo.redutor_ok if calculo else None,
-         'value_obs': calculo.redutor_obs if calculo else ''},
-    ]
+    # ── Linhas dinâmicas de conformidade de cálculo ────────────────────────
+    tipo_beneficio = processo.tipo_beneficio
+    regime = dados_beneficio.regime_reajuste if dados_beneficio else None
+
+    def _row(label, field_ok, field_obs, nao_informado=False):
+        val = getattr(calculo, field_ok, None) if calculo else None
+        return {
+            'label': label,
+            'field_ok': field_ok, 'field_obs': field_obs,
+            'value_ok': val,
+            'value_obs': getattr(calculo, field_obs, '') if calculo else '',
+            'nao_informado': nao_informado and val is None,
+        }
+
+    teto_row = _row('Teto remuneratório e acumulação verificados',
+                    'teto_acumulacao_ok', 'teto_acumulacao_obs', nao_informado=True)
+
+    if tipo_beneficio == 'PENSAO_MORTE':
+        situacao_inst = calculo.situacao_instituidor_pensao if calculo else ''
+        if situacao_inst == 'APOSENTADO':
+            base_label = 'Base de cálculo correta — último contracheque do aposentado falecido'
+        elif situacao_inst == 'EM_ATIVIDADE':
+            base_label = 'Base de cálculo correta — última remuneração do cargo efetivo (servidor falecido em atividade)'
+        else:
+            base_label = 'Base de cálculo correta (informe a situação do instituidor acima)'
+        calculo_rows = [
+            _row(base_label, 'base_calculo_ok', 'base_calculo_obs'),
+            _row('Reajuste aplicado corretamente', 'reajuste_ok', 'reajuste_obs'),
+            teto_row,
+        ]
+    elif regime == 'MEDIA':
+        reajuste_row = _row('Reajuste aplicado corretamente — índice INSS (Portaria MPS/MF)', 'reajuste_ok', 'reajuste_obs')
+        reajuste_row['nota_inss'] = True
+        calculo_rows = [
+            _row('Média/integralidade calculada corretamente', 'media_integralidade_ok', 'media_integralidade_obs'),
+            reajuste_row,
+            teto_row,
+        ]
+    elif regime == 'PARIDADE':
+        calculo_rows = [
+            _row('Composição da remuneração correta', 'composicao_remuneracao_ok', 'composicao_remuneracao_obs'),
+            teto_row,
+        ]
+    else:
+        # Regime não definido ou revisão: exibe todos os itens relevantes
+        calculo_rows = [
+            _row('Base de cálculo correta', 'base_calculo_ok', 'base_calculo_obs'),
+            _row('Composição da remuneração correta', 'composicao_remuneracao_ok', 'composicao_remuneracao_obs'),
+            _row('Média/integralidade calculada corretamente', 'media_integralidade_ok', 'media_integralidade_obs'),
+            _row('Reajuste aplicado corretamente', 'reajuste_ok', 'reajuste_obs'),
+            teto_row,
+        ]
 
     folha_rows = [
         {'label': 'Rubricas lançadas corretamente na folha',
@@ -266,11 +312,12 @@ def analise(request, processo_pk):
     # Tabela de reajuste para a aba de cálculo
     import json
     reajustes_qs = ReajusteINSS.objects.order_by('ano').values(
-        'ano', 'percentual_acima_minimo', 'percentual_piso', 'salario_minimo', 'teto_inss', 'base_legal'
+        'ano', 'vigencia', 'percentual_acima_minimo', 'percentual_piso', 'salario_minimo', 'teto_inss', 'base_legal'
     )
     reajustes_json = json.dumps([
         {
             'ano': r['ano'],
+            'vigencia': r['vigencia'].strftime('%m/%Y') if r['vigencia'] else '',
             'pct': float(r['percentual_acima_minimo']),
             'pctPiso': float(r['percentual_piso']),
             'sm': float(r['salario_minimo']),
@@ -279,8 +326,6 @@ def analise(request, processo_pk):
         }
         for r in reajustes_qs
     ])
-
-    dados_beneficio = getattr(processo, 'dados_beneficio', None)
 
     # Certidões de tempo averbado para exibição na aba de elegibilidade
     from analise.auto_analise import _parse_anos
@@ -306,7 +351,15 @@ def analise(request, processo_pk):
     elif dados_beneficio and dados_beneficio.valor_concedido:
         valor_base_sugerido = dados_beneficio.valor_concedido
 
-    valor_atual_sugerido = dados_beneficio.valor_pago_folha if dados_beneficio else None
+    contracheque = getattr(processo, 'contracheque', None)
+    if contracheque and contracheque.valor_vencimento:
+        valor_atual_sugerido = contracheque.valor_vencimento
+        ano_ref_contracheque = contracheque.mes_referencia.year
+        mes_ref_contracheque = contracheque.mes_referencia.strftime('%m/%Y')
+    else:
+        valor_atual_sugerido = dados_beneficio.valor_pago_folha if dados_beneficio else None
+        ano_ref_contracheque = None
+        mes_ref_contracheque = None
 
     return render(request, 'analise/analise.html', {
         'processo': processo,
@@ -331,12 +384,29 @@ def analise(request, processo_pk):
         'metodo_reajuste_choices': MetodoReajuste.choices,
         'dados_beneficio': dados_beneficio,
         'historico_reajuste': processo.historico_reajuste.all() if hasattr(processo, 'historico_reajuste') else [],
+        'situacao_instituidor_pensao': calculo.situacao_instituidor_pensao if calculo else '',
+        'eh_pensao': tipo_beneficio == 'PENSAO_MORTE',
+        'situacao_instituidor_choices': [('EM_ATIVIDADE', 'Servidor falecido em atividade'), ('APOSENTADO', 'Aposentado falecido')],
+        'contracheque': contracheque,
+        'ano_ref_contracheque': ano_ref_contracheque,
+        'mes_ref_contracheque': mes_ref_contracheque,
+        'data_ref_folha': data_ref_folha,
+        'valor_esperado': valor_esperado,
+        'passos_reajuste': passos_reajuste,
+        'eh_media': regime == 'MEDIA',
+        'subsidio_prefeito': _get_subsidio_prefeito(processo),
+        'is_procurador': 'procurador' in (processo.beneficiario.cargo or '').lower(),
+        'teto_rgps_atual': ReajusteINSS.objects.order_by('-ano').values_list('teto_inss', flat=True).first(),
         'certidoes': certidoes,
         'averbado_dias': averbado_dias,
         'averbado_display': averbado_display,
         'anos_proprio': anos_proprio,
         'total_contrib_anos': round(total_contrib_anos, 2),
         'total_contrib_display': total_contrib_display,
+        'analise_automatica': gerar_analise_tecnica(
+            processo, elegibilidade, calculo, folha, dados_beneficio,
+            valor_esperado, passos_reajuste, list(processo.achados.all()),
+        ),
     })
 
 
@@ -351,6 +421,11 @@ def pre_analise(request, processo_pk):
         regra = RegraAposentadoria.objects.get(pk=regra_id)
     except RegraAposentadoria.DoesNotExist:
         return JsonResponse({'erro': 'Regra não encontrada.'}, status=404)
+
+    # Vincula o instituto ao processo se ainda não estiver vinculado
+    if not processo.instituto_id:
+        processo.instituto = regra.instituto
+        processo.save(update_fields=['instituto'])
 
     resultado = executar_pre_analise(processo, regra)
 
@@ -391,20 +466,41 @@ def nota_tecnica_pdf(request, processo_pk):
     processo = get_object_or_404(
         Processo.objects.select_related(
             'beneficiario', 'lote', 'instituto',
-            'analiseelegibilidade', 'analisecalculo', 'conferenciafolha', 'nota_tecnica'
+            'analiseelegibilidade', 'analisecalculo', 'conferenciafolha',
+            'nota_tecnica', 'dados_beneficio', 'contracheque',
         ).prefetch_related('achados'),
         pk=processo_pk
     )
     nota = getattr(processo, 'nota_tecnica', None)
 
+    recalcular_conferencia(processo)
+    dados_beneficio = getattr(processo, 'dados_beneficio', None)
+    valor_esperado, passos_reajuste = calcular_valor_esperado(processo)
+    calculo_obj = getattr(processo, 'analisecalculo', None)
+    if valor_esperado is None and dados_beneficio and dados_beneficio.regime_reajuste == 'PARIDADE':
+        if calculo_obj and calculo_obj.valor_devido_mes_corrente:
+            valor_esperado = calculo_obj.valor_devido_mes_corrente
+        elif calculo_obj and calculo_obj.valor_reconstruido_ano:
+            valor_esperado = calculo_obj.valor_reconstruido_ano
+
+    eleg_obj  = getattr(processo, 'analiseelegibilidade', None)
+    folha_obj = getattr(processo, 'conferenciafolha', None)
+    achados_list = list(processo.achados.all())
     ctx = {
         'processo': processo,
         'nota': nota,
-        'elegibilidade': getattr(processo, 'analiseelegibilidade', None),
-        'calculo': getattr(processo, 'analisecalculo', None),
-        'folha': getattr(processo, 'conferenciafolha', None),
-        'achados': processo.achados.all(),
+        'elegibilidade': eleg_obj,
+        'calculo': calculo_obj,
+        'folha': folha_obj,
+        'dados_beneficio': dados_beneficio,
+        'valor_esperado': valor_esperado,
+        'passos_reajuste': passos_reajuste,
+        'achados': achados_list,
         'data_geracao': date.today().strftime('%d/%m/%Y'),
+        'analise_automatica': gerar_analise_tecnica(
+            processo, eleg_obj, calculo_obj, folha_obj, dados_beneficio,
+            valor_esperado, passos_reajuste, achados_list,
+        ),
     }
     html = render_to_string('analise/nota_tecnica_pdf.html', ctx)
     buf = io.BytesIO()

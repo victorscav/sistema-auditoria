@@ -70,8 +70,20 @@ def executar_pre_analise(processo, regra):
 
     # ── ELEGIBILIDADE ────────────────────────────────────────────────────────
 
+    # Tipos tratados como equivalentes para fins de enquadramento
+    _EQUIV = {
+        'APOS_VOLUNTARIA_IDADE_TC': {'APOS_VOLUNTARIA', 'APOS_VOLUNTARIA_PROP', 'APOS_VOLUNTARIA_IDADE_TC'},
+        'APOS_VOLUNTARIA':          {'APOS_VOLUNTARIA', 'APOS_VOLUNTARIA_IDADE_TC'},
+        'APOS_VOLUNTARIA_PROP':     {'APOS_VOLUNTARIA_PROP', 'APOS_VOLUNTARIA_IDADE_TC'},
+        'APOS_VOLUNTARIA_POR_IDADE':{'APOS_VOLUNTARIA_POR_IDADE', 'APOS_VOLUNTARIA_PROP_IDADE', 'APOS_VOLUNTARIA_PROP'},
+        'APOS_VOLUNTARIA_PROP_IDADE':{'APOS_VOLUNTARIA_PROP_IDADE','APOS_VOLUNTARIA_POR_IDADE', 'APOS_VOLUNTARIA_PROP'},
+        'APOS_INCAPACIDADE':        {'APOS_INCAPACIDADE', 'APOS_INVALIDEZ_PERMANENTE'},
+        'APOS_INVALIDEZ_PERMANENTE':{'APOS_INVALIDEZ_PERMANENTE', 'APOS_INCAPACIDADE'},
+    }
+    tipos_equiv = _EQUIV.get(processo.tipo_beneficio, {processo.tipo_beneficio})
+
     # enquadramento_correto
-    if processo.tipo_beneficio == regra.tipo_beneficio:
+    if regra.tipo_beneficio in tipos_equiv:
         enq_val = True
         enq_obs = (f'Tipo de benefício do processo ({processo.get_tipo_beneficio_display()}) '
                    f'corresponde ao tipo da regra.')
@@ -284,27 +296,126 @@ def executar_pre_analise(processo, regra):
             cargo_val = None
             cargo_obs = 'Não foi possível interpretar o tempo no cargo.'
     elif dados and dados.tempo_no_cargo:
-        cargo_val = None
-        cargo_obs = f'Tempo no cargo informado: {dados.tempo_no_cargo}. Sem mínimo definido na regra.'
+        # Tempo informado mas sem mínimo definido na regra — verifica e confirma o dado
+        anos_cargo_sem_min = _parse_anos(dados.tempo_no_cargo)
+        if anos_cargo_sem_min is not None and anos_cargo_sem_min > 0:
+            cargo_val = True
+            cargo_obs = (
+                f'Tempo no cargo verificado: {dados.tempo_no_cargo} ({anos_cargo_sem_min:.1f} anos). '
+                f'Regra não define tempo mínimo para este tipo de benefício. CONFORME.'
+            )
+        else:
+            cargo_val = None
+            cargo_obs = f'Tempo no cargo informado: {dados.tempo_no_cargo}. Não foi possível interpretar o valor.'
     else:
         cargo_val = None
         cargo_obs = 'Tempo no cargo não informado ou não exigido pela regra.'
 
     # marco_temporal_ingresso
-    if dados and dados.marco_temporal_ingresso and processo.data_concessao:
-        # Valida que ingressou antes da data de corte (EC 41/2003 = 31/12/2003)
+    if dados and dados.marco_temporal_ingresso:
         from datetime import date
-        ec41 = date(2003, 12, 31)
+        ec41  = date(2003, 12, 31)
+        ec103 = date(2019, 11, 13)
         marco = dados.marco_temporal_ingresso
+
+        # Marco temporal é sempre Conforme quando o ingresso é anterior à concessão
+        # — a diferença está em qual conjunto de regras se aplica.
+        marc_val = True
         if marco <= ec41:
-            marc_val = True
-            marc_obs = f'Ingresso em {marco.strftime("%d/%m/%Y")} — antes do marco da EC 41/2003. Pode ser elegível à regra de transição.'
+            marc_obs = (
+                f'Ingresso em {marco.strftime("%d/%m/%Y")} — anterior à EC 41/2003 (31/12/2003). '
+                f'Elegível às regras de transição da EC 41/2003. CONFORME.'
+            )
+        elif marco <= ec103:
+            marc_obs = (
+                f'Ingresso em {marco.strftime("%d/%m/%Y")} — posterior à EC 41/2003 e anterior à '
+                f'EC 103/2019 (13/11/2019). '
+                f'Elegível às regras de transição da EC 103/2019. CONFORME.'
+            )
         else:
-            marc_val = None
-            marc_obs = f'Ingresso em {marco.strftime("%d/%m/%Y")} — posterior à EC 41/2003. Verificar enquadramento na regra permanente.'
+            marc_obs = (
+                f'Ingresso em {marco.strftime("%d/%m/%Y")} — posterior à EC 103/2019 (13/11/2019). '
+                f'Sujeito exclusivamente às regras permanentes da EC 103/2019. CONFORME.'
+            )
     else:
         marc_val = None
         marc_obs = 'Marco temporal de ingresso não informado. Verificar manualmente.'
+
+    # carreira_cargo — verifica se cargo/carreira estão documentados no processo
+    cargo_nome = processo.beneficiario.cargo if processo.beneficiario else ''
+    cargo_paradigma = dados.cargo_paradigma if dados else ''
+    if cargo_nome or cargo_paradigma:
+        carr_cargo_val = True
+        partes = []
+        if cargo_nome:
+            partes.append(f'Cargo informado: {cargo_nome}.')
+        if cargo_paradigma:
+            partes.append(f'Cargo paradigma: {cargo_paradigma}.')
+        partes.append(
+            'Confirme na legislação municipal que o cargo é efetivo e pertence à '
+            'carreira declarada. CONFORME (documentado).'
+        )
+        carr_cargo_obs = ' '.join(partes)
+    else:
+        carr_cargo_val = None
+        carr_cargo_obs = (
+            'Cargo/carreira não informados no processo. '
+            'Preencha o campo "Cargo/Função" na edição do processo para permitir verificação.'
+        )
+
+    # base_calculo_pensao — verifica base de cálculo e redutor constitucional (EC 41/2003)
+    base_calc_val = None
+    base_calc_obs = ''
+    if processo.tipo_beneficio == 'PENSAO_MORTE':
+        # Teto RGPS: usa o mais recente cadastrado
+        from processos.models import ReajusteINSS as _RINSS2
+        teto_rgps_obj = _RINSS2.objects.order_by('-ano').first()
+        teto_rgps = teto_rgps_obj.teto_inss if teto_rgps_obj else None
+
+        base_proventos = dados.base_calculo if dados else None   # última remuneração/provento do instituidor
+        valor_pensao = dados.valor_concedido if dados else None
+
+        if base_proventos and valor_pensao and teto_rgps:
+            base_dec = Decimal(str(base_proventos))
+            pensao_dec = Decimal(str(valor_pensao))
+            teto_dec = Decimal(str(teto_rgps))
+
+            if base_dec <= teto_dec:
+                # Sem redutor: pensão = base integral
+                esperado = base_dec
+                base_calc_val = abs(pensao_dec - esperado) <= Decimal('1.00')
+                base_calc_obs = (
+                    f'Base de cálculo (proventos/remuneração do instituidor): R$ {base_proventos}. '
+                    f'Teto RGPS vigente: R$ {teto_rgps}. '
+                    f'Base não supera o teto — sem aplicação do redutor constitucional. '
+                    f'Valor esperado: R$ {esperado}. '
+                    f'Valor concedido: R$ {valor_pensao}. '
+                    + ('CONFORME.' if base_calc_val else f'NÃO CONFORME — divergência de R$ {abs(pensao_dec - esperado):.2f}.')
+                )
+            else:
+                # Redutor: pensão = teto_RGPS + 70% × (base - teto_RGPS)
+                excesso = base_dec - teto_dec
+                parcela_reducao = (excesso * Decimal('0.70')).quantize(Decimal('0.01'))
+                esperado = (teto_dec + parcela_reducao).quantize(Decimal('0.01'))
+                base_calc_val = abs(pensao_dec - esperado) <= Decimal('1.00')
+                base_calc_obs = (
+                    f'Base de cálculo (proventos/remuneração do instituidor): R$ {base_proventos}. '
+                    f'Teto RGPS vigente: R$ {teto_rgps}. '
+                    f'Aplica redutor constitucional (EC 41/2003): '
+                    f'R$ {teto_dec} + 70% × (R$ {base_dec} − R$ {teto_dec}) = '
+                    f'R$ {teto_dec} + R$ {parcela_reducao} = R$ {esperado}. '
+                    f'Valor concedido: R$ {valor_pensao}. '
+                    + ('CONFORME.' if base_calc_val else f'NÃO CONFORME — divergência de R$ {abs(pensao_dec - esperado):.2f}.')
+                )
+        elif not base_proventos:
+            base_calc_obs = (
+                'Base de cálculo do instituidor não informada. '
+                'Preencha o campo "Base de Cálculo" nos dados do processo para verificação automática do redutor.'
+            )
+        elif not teto_rgps:
+            base_calc_obs = 'Teto RGPS não cadastrado. Informe na tabela de Reajustes INSS.'
+        else:
+            base_calc_obs = 'Valor concedido não informado — verificação do redutor não pôde ser concluída.'
 
     # condicao_dependente (apenas para pensão)
     if processo.tipo_beneficio == 'PENSAO_MORTE':
@@ -314,20 +425,53 @@ def executar_pre_analise(processo, regra):
         dep_val = True
         dep_obs = 'Não aplicável para este tipo de benefício.'
 
-    eleg_checks = [enq_val, norm_val, req_idade_val, tc_val, sp_val, cargo_val]
+    eleg_checks = [enq_val, norm_val, req_idade_val, tc_val, sp_val, carr_cargo_val, cargo_val]
     eleg_resultado = _resultado_sugerido(eleg_checks)
 
     # ── CÁLCULO ──────────────────────────────────────────────────────────────
 
-    # teto_acumulacao
-    if dados and dados.valor_concedido is not None and regra.teto_remuneratorio is not None:
-        teto_val = Decimal(str(dados.valor_concedido)) <= regra.teto_remuneratorio
-        teto_obs = (f'Valor concedido: R$ {dados.valor_concedido}. '
-                    f'Teto remuneratório: R$ {regra.teto_remuneratorio}. '
-                    f'{"CONFORME" if teto_val else "NÃO CONFORME"}.')
+    # teto_acumulacao — teto é o subsídio do prefeito; exceção: procuradores municipais
+    cargo = (processo.beneficiario.cargo if processo.beneficiario else '') or ''
+    is_procurador = 'procurador' in cargo.lower()
+
+    from institutos.models import Instituto as _Inst
+    subsidio_prefeito = None
+    if processo.instituto_id:
+        subsidio_prefeito = _Inst.objects.filter(pk=processo.instituto_id).values_list('subsidio_prefeito', flat=True).first()
+    if subsidio_prefeito is None:
+        # Processo sem instituto vinculado: usa o único ativo disponível
+        subsidio_prefeito = _Inst.objects.filter(ativo=True).order_by('pk').values_list('subsidio_prefeito', flat=True).first()
+
+    valor_verificar_teto = dados.valor_concedido if dados else None
+
+    if is_procurador:
+        teto_val = None
+        teto_obs = (
+            f'Cargo: {cargo}. '
+            'Procurador municipal possui teto remuneratório diferenciado (art. 37, XI CF/88 c/c art. 135 CF/88). '
+            'Verificar o subsídio dos membros do TCE ou AGU aplicável ao município. '
+            'Verificação manual necessária.'
+        )
+    elif subsidio_prefeito and valor_verificar_teto is not None:
+        val_dec = Decimal(str(valor_verificar_teto))
+        teto_val = val_dec <= subsidio_prefeito
+        teto_obs = (
+            f'Teto remuneratório = subsídio do Prefeito: R$ {subsidio_prefeito}. '
+            f'Valor do benefício: R$ {valor_verificar_teto}. '
+            + ('CONFORME.' if teto_val else f'NÃO CONFORME — valor supera o teto em R$ {val_dec - subsidio_prefeito:.2f}.')
+        )
+    elif subsidio_prefeito:
+        teto_val = None
+        teto_obs = (
+            f'Subsídio do Prefeito cadastrado: R$ {subsidio_prefeito}. '
+            'Valor do benefício não informado — verificação não pôde ser concluída.'
+        )
     else:
         teto_val = None
-        teto_obs = 'Valor concedido ou teto remuneratório não informados.'
+        teto_obs = (
+            'Subsídio do Prefeito não cadastrado no Instituto. '
+            'Informe o valor no cadastro do Instituto RPPS para habilitar a verificação automática.'
+        )
 
     # ── helper: salário mínimo vigente na data de concessão ─────────────────
     def _salario_minimo_vigente(data_concessao):
@@ -449,8 +593,73 @@ def executar_pre_analise(processo, regra):
         integ_val = None
         integ_obs = 'Integralidade não informada no processo ou na regra.'
 
-    # reajuste
-    if dados and dados.criterio_reajuste and regra.criterio_reajuste:
+    # reajuste — regime MÉDIA: aplica índices INSS acumulados e compara com contracheque
+    from processos.models import ReajusteINSS as _RINSS
+    import datetime as _dt
+    if dados and dados.regime_reajuste == _RR.MEDIA and dados.valor_concedido and processo.data_concessao:
+        contracheque = getattr(processo, 'contracheque', None)
+        valor_atual = None
+        mes_ref = None
+        fonte_atual = ''
+        if contracheque and contracheque.valor_vencimento:
+            valor_atual = Decimal(str(contracheque.valor_vencimento))
+            mes_ref = contracheque.mes_referencia
+            fonte_atual = f'contracheque {mes_ref.strftime("%m/%Y")}'
+        elif dados.valor_pago_folha:
+            valor_atual = Decimal(str(dados.valor_pago_folha))
+            fonte_atual = 'folha de pagamento'
+
+        valor_base = Decimal(str(dados.valor_concedido))
+        ano_base = processo.data_concessao.year
+        ano_final = mes_ref.year if mes_ref else _dt.date.today().year
+
+        reajustes_qs = _RINSS.objects.filter(ano__gt=ano_base, ano__lte=ano_final).order_by('ano')
+
+        sm_ref_obj = _RINSS.objects.filter(ano__lte=ano_base).order_by('-ano').first()
+        sm_anterior = sm_ref_obj.salario_minimo if sm_ref_obj else Decimal('0')
+
+        valor_esperado = valor_base
+        aplicados = []
+        for r in reajustes_qs:
+            is_piso = valor_esperado <= sm_anterior
+            pct = r.percentual_piso if is_piso else r.percentual_acima_minimo
+            valor_esperado = valor_esperado * (1 + pct / Decimal('100'))
+            if valor_esperado < r.salario_minimo:
+                valor_esperado = r.salario_minimo
+            sm_anterior = r.salario_minimo
+            aplicados.append(f'{r.ano}: {float(pct):.2f}% ({r.base_legal})')
+
+        valor_esperado = valor_esperado.quantize(Decimal('0.01'))
+
+        if valor_atual is not None:
+            diff = abs(valor_atual - valor_esperado)
+            reaj_val = diff <= Decimal('1.00')
+            if aplicados:
+                reaj_obs = (
+                    f'Regime MÉDIA — reajuste INSS acumulado. '
+                    f'Valor na concessão ({ano_base}): R$ {valor_base}. '
+                    f'Índices aplicados: {" | ".join(aplicados)}. '
+                    f'Valor esperado: R$ {valor_esperado}. '
+                    f'Valor atual ({fonte_atual}): R$ {valor_atual}. '
+                    + ('CONFORME.' if reaj_val else f'NÃO CONFORME — divergência de R$ {diff:.2f}.')
+                )
+            else:
+                diff_base = abs(valor_atual - valor_base)
+                reaj_val = diff_base <= Decimal('1.00')
+                reaj_obs = (
+                    f'Regime MÉDIA — sem reajustes INSS cadastrados entre {ano_base} e {ano_final}. '
+                    f'Valor na concessão: R$ {valor_base}. '
+                    f'Valor atual ({fonte_atual}): R$ {valor_atual}. '
+                    + ('CONFORME — sem reajuste a aplicar no período.' if reaj_val
+                       else f'NÃO CONFORME — divergência de R$ {diff_base:.2f} sem reajuste previsto.')
+                )
+        else:
+            reaj_val = None
+            reaj_obs = (
+                'Regime MÉDIA: valor atual não disponível para verificação automática. '
+                'Importe o contracheque do beneficiário na tela do processo ou informe o valor pago na folha.'
+            )
+    elif dados and dados.criterio_reajuste and regra.criterio_reajuste:
         reaj_val = regra.criterio_reajuste.upper() in dados.criterio_reajuste.upper()
         reaj_obs = (f'Critério de reajuste informado: "{dados.criterio_reajuste}". '
                     f'Critério previsto pela regra: "{regra.criterio_reajuste}". '
@@ -482,7 +691,7 @@ def executar_pre_analise(processo, regra):
     else:
         regime_obs = 'Regime de reajuste não definido no processo. Informe PARIDADE ou MÉDIA.'
 
-    calc_checks = [teto_val, integ_val, reaj_val]
+    calc_checks = [teto_val, integ_val, reaj_val, base_calc_val]
     calc_resultado = _resultado_sugerido(calc_checks)
 
     # ── FOLHA ────────────────────────────────────────────────────────────────
@@ -529,6 +738,7 @@ def executar_pre_analise(processo, regra):
             'requisitos_idade': (req_idade_val, req_idade_obs),
             'tempo_contribuicao_ok': (tc_val, tc_obs),
             'tempo_servico_publico_ok': (sp_val, sp_obs),
+            'carreira_cargo_ok': (carr_cargo_val, carr_cargo_obs),
             'tempo_carreira_ok': (carr_val, carr_obs),
             'tempo_no_cargo_ok': (cargo_val, cargo_obs),
             'marco_temporal_ok': (marc_val, marc_obs),
@@ -540,6 +750,7 @@ def executar_pre_analise(processo, regra):
             'teto_acumulacao_ok': (teto_val, teto_obs),
             'media_integralidade_ok': (integ_val, integ_obs),
             'reajuste_ok': (reaj_val, reaj_obs),
+            'base_calculo_ok': (base_calc_val, base_calc_obs),
             'regime_compativel': (regime_val, regime_obs),
             'resultado_sugerido': calc_resultado,
         },

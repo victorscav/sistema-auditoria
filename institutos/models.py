@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from processos.models import TipoBeneficio
 
 
@@ -13,6 +14,11 @@ class Instituto(models.Model):
         default=False,
         verbose_name='Aderiu à Reforma da EC 103/2019',
         help_text='Marque se o município promulgou lei própria de reforma previdenciária com base na EC 103/2019, revogando as regras constitucionais anteriores.',
+    )
+    subsidio_prefeito = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Subsídio do Prefeito (R$)',
+        help_text='Teto remuneratório dos servidores e pensionistas do RPPS (art. 37, XI CF/88). Exceção: procuradores municipais possuem teto próprio.',
     )
     observacoes = models.TextField(blank=True, verbose_name='Observações')
 
@@ -67,3 +73,36 @@ class RegraAposentadoria(models.Model):
 
     def __str__(self):
         return f'{self.get_tipo_beneficio_display()} — {self.norma_base} ({self.instituto})'
+
+
+class LeiMunicipalReajuste(models.Model):
+    """Lei municipal que concede reajuste aos servidores ativos e/ou inativos."""
+    instituto       = models.ForeignKey(Instituto, on_delete=models.CASCADE,
+                                        related_name='leis_reajuste', verbose_name='Instituto')
+    numero          = models.CharField(max_length=50, verbose_name='Número da Lei',
+                                       help_text='Ex: 1.582/2025')
+    descricao       = models.CharField(max_length=300, blank=True, verbose_name='Ementa')
+    data_publicacao = models.DateField(verbose_name='Data de Publicação')
+    data_vigencia   = models.DateField(verbose_name='Data de Vigência (efeitos financeiros)')
+    percentual      = models.DecimalField(max_digits=7, decimal_places=4,
+                                          verbose_name='Percentual de Reajuste (%)')
+    base_indice     = models.CharField(max_length=100, blank=True, verbose_name='Índice de Referência',
+                                       help_text='Ex: IPCA 2024, IPC-A, INPC')
+    base_legal      = models.TextField(blank=True, verbose_name='Fundamento Legal')
+    aplica_inativos = models.BooleanField(default=True,
+                                          verbose_name='Aplica-se a proventos de inatividade')
+    aplica_pensoes  = models.BooleanField(default=True,
+                                          verbose_name='Aplica-se a pensões')
+    arquivo         = models.FileField(upload_to='leis_municipais/', blank=True,
+                                       verbose_name='Arquivo PDF')
+    observacoes     = models.TextField(blank=True, verbose_name='Observações')
+    data_cadastro   = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name          = 'Lei Municipal de Reajuste'
+        verbose_name_plural   = 'Leis Municipais de Reajuste'
+        ordering              = ['data_vigencia']
+        unique_together       = [('instituto', 'numero')]
+
+    def __str__(self):
+        return f'Lei nº {self.numero} — {self.percentual}% ({self.instituto.municipio})'

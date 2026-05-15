@@ -106,6 +106,45 @@ class AnaliseCalculo(models.Model):
         verbose_name='Diferença Apurada vs Folha (R$)'
     )
 
+    # Situação do instituidor — exclusivo para PENSAO_MORTE
+    SITUACAO_INSTITUIDOR_CHOICES = [
+        ('EM_ATIVIDADE', 'Servidor falecido em atividade'),
+        ('APOSENTADO', 'Aposentado falecido'),
+    ]
+    situacao_instituidor_pensao = models.CharField(
+        max_length=20,
+        choices=SITUACAO_INSTITUIDOR_CHOICES,
+        blank=True,
+        verbose_name='Situação do Instituidor (Pensão por Morte)',
+        help_text='Para pensão por morte: indica se o instituidor era servidor ativo ou aposentado.'
+    )
+
+    # ── Acumulação de benefícios (Art. 24 EC 103/2019) ───────────────────────
+    houve_acumulacao = models.BooleanField(
+        null=True, blank=True,
+        verbose_name='Houve acumulação de benefícios?',
+        help_text='Indica se o beneficiário acumula este benefício com outro (RPPS, RGPS ou cargo ativo).'
+    )
+    acumulacao_cargos_acumulaveis = models.BooleanField(
+        null=True, blank=True,
+        verbose_name='Cargos/benefícios acumuláveis (art. 37, XVI CF/88)?',
+        help_text='Verdadeiro se os cargos de origem são acumuláveis por força constitucional (professor+técnico-científico, dois médicos, etc.).'
+    )
+    acumulacao_valor_total = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Valor total acumulado (R$)',
+        help_text='Soma de todos os benefícios acumulados.'
+    )
+    acumulacao_regular = models.BooleanField(
+        null=True, blank=True,
+        verbose_name='Acumulação regular?',
+        help_text='True = regular, False = irregular (vedada ou supera o teto).'
+    )
+    acumulacao_obs = models.TextField(
+        blank=True,
+        verbose_name='Observações — Acumulação'
+    )
+
     # Trava de consistência: regime x método
     regime_compativel = models.BooleanField(
         null=True, blank=True,
@@ -186,8 +225,16 @@ class ConferenciaFolha(models.Model):
     teto_constitucional_ok = models.BooleanField(null=True, blank=True, verbose_name='Teto constitucional observado')
     teto_constitucional_obs = models.TextField(blank=True, verbose_name='Observações - Teto Constitucional')
 
+    # Valor esperado calculado automaticamente (valor_concedido + reajustes)
+    valor_esperado = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Valor Esperado após Reajustes (R$)'
+    )
+
     tipo_divergencia = models.CharField(max_length=20, choices=TipoDivergencia.choices, default=TipoDivergencia.SEM_DIVERGENCIA, verbose_name='Tipo de Divergência')
     impacto_financeiro_estimado = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Impacto Financeiro Estimado (R$)')
+
+    observacoes = models.TextField(blank=True, verbose_name='Observações')
 
     resultado = models.CharField(max_length=20, choices=ResultadoAnalise.choices, default=ResultadoAnalise.INDETERMINADO, verbose_name='Resultado')
     auditor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='Auditor')

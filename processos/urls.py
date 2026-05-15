@@ -11,6 +11,7 @@ urlpatterns = [
     path('<int:pk>/contracheque/', views.salvar_contracheque, name='salvar_contracheque'),
     path('<int:pk>/certidoes/', views.certidoes_tempo, name='certidoes_tempo'),
     path('<int:pk>/contribuicoes/', views.contribuicoes_processo, name='contribuicoes_processo'),
+    path('<int:pk>/documentos/', views.documentos_processo, name='documentos_processo'),
     path('importar-pdf/', views.importar_pdf, name='importar_pdf'),
     path('importar-planilha/', views.importar_planilha, name='importar_planilha'),
     path('planilha-exemplo/', views.download_planilha_exemplo, name='planilha_exemplo'),

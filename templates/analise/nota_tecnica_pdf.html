@@ -44,7 +44,7 @@
 
 <!-- Cabeçalho -->
 <div class="header">
-    <div style="font-size:7.5pt;color:#555;letter-spacing:1pt;text-transform:uppercase;">Auditoria Técnica Previdenciária — RPPS Barra Mansa</div>
+    <div style="font-size:7.5pt;color:#555;letter-spacing:1pt;text-transform:uppercase;">Auditoria Técnica Previdenciária — {% if processo.instituto %}{{ processo.instituto.nome }}{% else %}RPPS{% endif %}</div>
     <h1>NOTA TÉCNICA DE AUDITORIA</h1>
     <div class="subtitle">Processo: {{ processo.numero }} — {{ processo.beneficiario.nome }}</div>
 </div>
@@ -67,72 +67,272 @@
 
 <!-- Resultado da análise -->
 <h2>2. Resultado da Análise</h2>
+
+{% with resultado=processo.get_resultado_analise %}
+<table class="meta-table" style="margin-bottom:10pt;">
+    <tr>
+        <td style="width:35%">Resultado Final do Processo</td>
+        <td>
+            <strong class="badge-{{ resultado|lower|default:'indeterminado' }}">
+                {% if resultado == 'CONFORME' %}CONFORME
+                {% elif resultado == 'NAO_CONFORME' %}NÃO CONFORME
+                {% elif resultado == 'RESSALVAS' %}CONFORME COM RESSALVAS
+                {% else %}INDETERMINADO{% endif %}
+            </strong>
+        </td>
+    </tr>
+</table>
+{% endwith %}
+
+<!-- 2.1 Elegibilidade -->
+{% if elegibilidade %}
+<div style="font-size:8.5pt;font-weight:bold;color:#1A3A5C;margin:6pt 0 2pt 0;">
+    2.1 Elegibilidade —
+    <span class="badge-{{ elegibilidade.resultado|lower }}">{{ elegibilidade.get_resultado_display }}</span>
+</div>
 <table class="check-table">
     <thead>
-        <tr><th style="width:45%">Módulo</th><th style="width:20%">Resultado</th><th>Observações Relevantes</th></tr>
+        <tr>
+            <th style="width:30%">Item Verificado</th>
+            <th style="width:12%">Resultado</th>
+            <th>Observações</th>
+        </tr>
     </thead>
     <tbody>
+        {% with e=elegibilidade %}
         <tr>
-            <td>Elegibilidade</td>
-            <td class="{% if elegibilidade %}badge-{{ elegibilidade.resultado|lower }}{% endif %}">
-                {% if elegibilidade %}{{ elegibilidade.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td style="font-size:7.5pt">
-                {% if elegibilidade %}
-                {% if not elegibilidade.enquadramento_correto %}<div>Enquadramento: {{ elegibilidade.enquadramento_obs }}</div>{% endif %}
-                {% if not elegibilidade.requisitos_idade %}<div>Idade: {{ elegibilidade.requisitos_idade_obs }}</div>{% endif %}
-                {% if not elegibilidade.tempo_contribuicao_ok %}<div>Contribuição: {{ elegibilidade.tempo_contribuicao_obs }}</div>{% endif %}
-                {% if not elegibilidade.carreira_cargo_ok %}<div>Carreira/Cargo: {{ elegibilidade.carreira_cargo_obs }}</div>{% endif %}
-                {% endif %}
-            </td>
+            <td>Enquadramento no tipo de benefício</td>
+            <td>{% if e.enquadramento_correto is True %}<span class="ok">CONFORME</span>{% elif e.enquadramento_correto is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.enquadramento_obs|default:"—" }}</td>
         </tr>
         <tr class="even">
-            <td>Conformidade de Cálculo</td>
-            <td class="{% if calculo %}badge-{{ calculo.resultado|lower }}{% endif %}">
-                {% if calculo %}{{ calculo.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td style="font-size:7.5pt">
-                {% if calculo %}
-                {% if not calculo.teto_acumulacao_ok %}<div>Teto: {{ calculo.teto_acumulacao_obs }}</div>{% endif %}
-                {% if not calculo.media_integralidade_ok %}<div>Integralidade: {{ calculo.media_integralidade_obs }}</div>{% endif %}
-                {% if not calculo.redutor_ok %}<div>Redutor: {{ calculo.redutor_obs }}</div>{% endif %}
-                {% if not calculo.reajuste_ok %}<div>Reajuste: {{ calculo.reajuste_obs }}</div>{% endif %}
-                {% endif %}
-            </td>
+            <td>Requisitos de idade</td>
+            <td>{% if e.requisitos_idade is True %}<span class="ok">CONFORME</span>{% elif e.requisitos_idade is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.requisitos_idade_obs|default:"—" }}</td>
         </tr>
         <tr>
-            <td>Conferência de Folha</td>
-            <td class="{% if folha %}badge-{{ folha.resultado|lower }}{% endif %}">
-                {% if folha %}{{ folha.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td style="font-size:7.5pt">
-                {% if folha and folha.tipo_divergencia != 'SEM_DIVERGENCIA' %}
-                <div>{{ folha.get_tipo_divergencia_display }}{% if folha.impacto_financeiro_estimado %} — Impacto: R$ {{ folha.impacto_financeiro_estimado }}{% endif %}</div>
-                {% endif %}
-            </td>
+            <td>Tempo de contribuição</td>
+            <td>{% if e.tempo_contribuicao_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_contribuicao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.tempo_contribuicao_obs|default:"—" }}</td>
         </tr>
         <tr class="even">
-            <td><strong>Resultado Final</strong></td>
-            <td colspan="2">
-                {% with resultado=processo.get_resultado_analise %}
-                <span class="badge-{{ resultado|lower|default:'pendente' }}">
-                    <strong>{{ resultado|default:"Pendente" }}</strong>
-                </span>
-                {% endwith %}
-            </td>
+            <td>Tempo de serviço público</td>
+            <td>{% if e.tempo_servico_publico_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_servico_publico_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.tempo_servico_publico_obs|default:"—" }}</td>
         </tr>
+        <tr>
+            <td>Normas vigentes à época</td>
+            <td>{% if e.normas_vigentes_epoca_ok is True %}<span class="ok">CONFORME</span>{% elif e.normas_vigentes_epoca_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.normas_vigentes_epoca_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Carreira e cargo verificados</td>
+            <td>{% if e.carreira_cargo_ok is True %}<span class="ok">CONFORME</span>{% elif e.carreira_cargo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.carreira_cargo_obs|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td>Tempo de carreira</td>
+            <td>{% if e.tempo_carreira_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_carreira_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.tempo_carreira_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Tempo no cargo</td>
+            <td>{% if e.tempo_no_cargo_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_no_cargo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.tempo_no_cargo_obs|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td>Marco temporal de ingresso</td>
+            <td>{% if e.marco_temporal_ok is True %}<span class="ok">CONFORME</span>{% elif e.marco_temporal_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.marco_temporal_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Condição de dependente</td>
+            <td>{% if e.condicao_dependente_ok is True %}<span class="ok">CONFORME</span>{% elif e.condicao_dependente_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ e.condicao_dependente_obs|default:"—" }}</td>
+        </tr>
+        {% endwith %}
     </tbody>
 </table>
+{% endif %}
 
-<!-- Texto da nota técnica -->
-<h2>3. Análise Técnica</h2>
-<div class="texto-nota">
-    {% if nota and nota.texto %}
-        {{ nota.texto|linebreaks }}
-    {% else %}
-        <span style="color:#aaa;font-style:italic;">Nota técnica não elaborada.</span>
-    {% endif %}
+<!-- 2.2 Conformidade de Cálculo -->
+{% if calculo %}
+{% with c=calculo regime=dados_beneficio.regime_reajuste tipo=processo.tipo_beneficio %}
+<div style="font-size:8.5pt;font-weight:bold;color:#1A3A5C;margin:8pt 0 2pt 0;">
+    2.2 Conformidade de Cálculo —
+    <span class="badge-{{ c.resultado|lower }}">{{ c.get_resultado_display }}</span>
 </div>
+<table class="check-table">
+    <thead>
+        <tr>
+            <th style="width:30%">Item Verificado</th>
+            <th style="width:12%">Resultado</th>
+            <th>Observações</th>
+        </tr>
+    </thead>
+    <tbody>
+        {# Pensão por morte #}
+        {% if tipo == 'PENSAO_MORTE' %}
+        <tr>
+            <td>Base de cálculo{% if c.situacao_instituidor_pensao == 'APOSENTADO' %} — último contracheque do aposentado{% elif c.situacao_instituidor_pensao == 'EM_ATIVIDADE' %} — última remuneração do servidor em atividade{% endif %}</td>
+            <td>{% if c.base_calculo_ok is True %}<span class="ok">CONFORME</span>{% elif c.base_calculo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.base_calculo_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Reajuste aplicado</td>
+            <td>{% if c.reajuste_ok is True %}<span class="ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.reajuste_obs|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td>Teto remuneratório / acumulação</td>
+            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
+        </tr>
+
+        {# Regime MÉDIA — reajuste pelo índice INSS #}
+        {% elif regime == 'MEDIA' %}
+        <tr>
+            <td>Média / integralidade calculada corretamente</td>
+            <td>{% if c.media_integralidade_ok is True %}<span class="ok">CONFORME</span>{% elif c.media_integralidade_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.media_integralidade_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Reajuste aplicado — índice INSS (Portaria MPS/MF)</td>
+            <td>{% if c.reajuste_ok is True %}<span class="ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.reajuste_obs|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td>Teto remuneratório / acumulação</td>
+            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
+        </tr>
+
+        {# Regime PARIDADE — reajuste acompanha cargo ativo #}
+        {% elif regime == 'PARIDADE' %}
+        <tr>
+            <td>Composição da remuneração correta (paridade com cargo ativo)</td>
+            <td>{% if c.composicao_remuneracao_ok is True %}<span class="ok">CONFORME</span>{% elif c.composicao_remuneracao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.composicao_remuneracao_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Teto remuneratório / acumulação</td>
+            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
+        </tr>
+
+        {# Regime não definido — exibe todos os itens relevantes #}
+        {% else %}
+        <tr>
+            <td>Base de cálculo</td>
+            <td>{% if c.base_calculo_ok is True %}<span class="ok">CONFORME</span>{% elif c.base_calculo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.base_calculo_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Composição da remuneração</td>
+            <td>{% if c.composicao_remuneracao_ok is True %}<span class="ok">CONFORME</span>{% elif c.composicao_remuneracao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.composicao_remuneracao_obs|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td>Média / integralidade</td>
+            <td>{% if c.media_integralidade_ok is True %}<span class="ok">CONFORME</span>{% elif c.media_integralidade_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.media_integralidade_obs|default:"—" }}</td>
+        </tr>
+        <tr class="even">
+            <td>Reajuste aplicado</td>
+            <td>{% if c.reajuste_ok is True %}<span class="ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.reajuste_obs|default:"—" }}</td>
+        </tr>
+        <tr>
+            <td>Teto remuneratório / acumulação</td>
+            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
+        </tr>
+        {% endif %}
+
+        {# Método de reajuste aplicado (quando preenchido manualmente) #}
+        {% if c.metodo_reajuste_aplicado %}
+        <tr class="even">
+            <td>Método de reajuste aplicado</td>
+            <td>{% if c.regime_compativel is True %}<span class="ok">CONFORME</span>{% elif c.regime_compativel is False %}<span class="nok">INCOMPATÍVEL</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
+            <td style="font-size:7.5pt">
+                {{ c.get_metodo_reajuste_aplicado_display|default:c.metodo_reajuste_aplicado }}
+                {% if c.lei_municipal_aplicada %} — {{ c.lei_municipal_aplicada }}{% endif %}
+                {% if c.indice_inss_aplicado %} — Índice: {{ c.indice_inss_aplicado }}%{% endif %}
+                {% if c.regime_compativel_obs %} — {{ c.regime_compativel_obs }}{% endif %}
+            </td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endwith %}
+{% endif %}
+
+<!-- 2.3 Conferência de Folha -->
+{% if folha %}
+<div style="font-size:8.5pt;font-weight:bold;color:#1A3A5C;margin:8pt 0 2pt 0;">
+    2.3 Conferência de Folha —
+    <span class="badge-{{ folha.resultado|lower }}">{{ folha.get_resultado_display }}</span>
+</div>
+<table class="meta-table" style="margin-bottom:4pt;">
+    {% if dados_beneficio %}
+    <tr>
+        <td>Regime de Reajuste</td>
+        <td>{{ dados_beneficio.get_regime_reajuste_display|default:"—" }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+        <td>Valor na Concessão</td>
+        <td>{% if folha.valor_concedido %}R$ {{ folha.valor_concedido }}{% if processo.data_concessao %} ({{ processo.data_concessao|date:"d/m/Y" }}){% endif %}{% else %}—{% endif %}</td>
+    </tr>
+    <tr>
+        <td>Valor Esperado (com reajuste)</td>
+        <td>
+            {% if valor_esperado %}
+                <strong>R$ {{ valor_esperado }}</strong>
+                {% if passos_reajuste %}
+                — {% for p in passos_reajuste %}{% if dados_beneficio.regime_reajuste == 'PARIDADE' %}Lei {{ p.lei }} ({{ p.vigencia }}, +{{ p.percentual }}%){% else %}INSS {{ p.ano }} ({{ p.vigencia }}, +{{ p.percentual }}%){% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}
+                {% endif %}
+            {% else %}—{% endif %}
+        </td>
+    </tr>
+    <tr>
+        <td>Valor Pago na Folha</td>
+        <td>{% if folha.valor_pago_folha %}R$ {{ folha.valor_pago_folha }}{% else %}—{% endif %}</td>
+    </tr>
+    <tr>
+        <td>Divergência Apurada</td>
+        <td>
+            {% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}
+                <span class="ok">SEM DIVERGÊNCIA</span>
+            {% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}
+                <span class="nok">PAGAMENTO MAIOR — R$ {{ folha.impacto_financeiro_estimado }} acima do esperado</span>
+            {% elif folha.tipo_divergencia == 'PAGAMENTO_MENOR' %}
+                <span class="nok">PAGAMENTO MENOR — R$ {{ folha.impacto_financeiro_estimado }} abaixo do esperado</span>
+            {% else %}—{% endif %}
+        </td>
+    </tr>
+    {% if folha.observacoes %}
+    <tr>
+        <td>Observações do Auditor</td>
+        <td style="font-size:8pt;">{{ folha.observacoes }}</td>
+    </tr>
+    {% endif %}
+</table>
+{% endif %}
+
+<!-- Análise técnica automática -->
+<h2>3. Análise Técnica</h2>
+{% if analise_automatica %}
+<div class="texto-nota">
+    {% for paragrafo in analise_automatica %}
+    <p style="margin-bottom:6pt; text-align:justify;">{{ paragrafo }}</p>
+    {% endfor %}
+</div>
+{% else %}
+<div class="texto-nota">
+    <span style="color:#aaa;font-style:italic;">Análise técnica não disponível — preencha as abas de Elegibilidade, Cálculo e Conferência de Folha.</span>
+</div>
+{% endif %}
 
 <!-- Achados -->
 {% if achados %}
@@ -151,17 +351,22 @@
 {% endfor %}
 {% endif %}
 
+<!-- Observações adicionais do auditor -->
+{% if nota and nota.texto %}
+<h2>{% if achados %}5{% else %}4{% endif %}. Observações Adicionais do Auditor</h2>
+<div class="texto-nota">{{ nota.texto|linebreaks }}</div>
+{% endif %}
+
 <!-- Limitações documentais -->
 {% if nota and nota.limitacao_documental %}
-<h2>5. Limitações Técnicas (cf. Cláusula 12.4)</h2>
+<h2>{% if achados and nota and nota.texto %}6{% elif achados or nota and nota.texto %}5{% else %}4{% endif %}. Limitações Técnicas (cf. Cláusula 12.4)</h2>
 <div class="limitacao">{{ nota.limitacao_documental|linebreaks }}</div>
 {% endif %}
 
 <!-- Assinatura -->
 <div style="margin-top:30pt;border-top:0.5pt solid #ccc;padding-top:10pt;text-align:center;font-size:8pt;color:#555;">
     <div style="margin-bottom:20pt">________________________________________</div>
-    <div>Auditor(a) Responsável</div>
-    <div style="margin-top:2pt">RPPS Barra Mansa — {{ data_geracao }}</div>
+    <div style="font-weight:bold;letter-spacing:2pt;">EQUIPE TÉCNICA</div>
 </div>
 
 </body>

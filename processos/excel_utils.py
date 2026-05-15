@@ -29,14 +29,24 @@ COLUNAS_PLANILHA = [
     ('media_contribuicoes', 'Média das Contribuições (R$)'),
     ('proporcionalidade_percentual', 'Proporcionalidade (%)'),
     ('idade_concessao', 'Idade na Concessão'),
+    ('regime_reajuste', 'Regime de Reajuste'),
+    ('contracheque_mes_ref', 'Contracheque - Mês de Referência'),
+    ('contracheque_vencimento', 'Contracheque - Vencimento/Salário (R$)'),
+    ('contracheque_ultima_remuneracao', 'Contracheque - Última Remuneração Cargo (R$)'),
+    ('contracheque_lei_reajuste', 'Contracheque - Lei de Reajuste Municipal'),
     ('observacoes', 'Observações'),
 ]
 
 TIPOS_BENEFICIO_VALIDOS = [
     'APOS_VOLUNTARIA',
     'APOS_VOLUNTARIA_PROP',
+    'APOS_VOLUNTARIA_POR_IDADE',
+    'APOS_VOLUNTARIA_PROP_IDADE',
+    'APOS_VOLUNTARIA_IDADE_TC',
     'APOS_INCAPACIDADE',
+    'APOS_INVALIDEZ_PERMANENTE',
     'APOS_COMPULSORIA',
+    'APOS_ESPECIAL_MAGISTERIO',
     'PENSAO_MORTE',
     'REVISAO_REENQUADRAMENTO',
 ]
@@ -69,12 +79,17 @@ def gerar_planilha_padronizada(dados_lista):
         cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         cell.border = border
 
-    # Aba de referência para tipos de benefício
+    # Aba de referência para tipos de benefício e regimes
     ws_ref = wb.create_sheet('Referência')
     ws_ref['A1'] = 'Tipos de Benefício Válidos'
     ws_ref['A1'].font = Font(bold=True)
     for i, tipo in enumerate(TIPOS_BENEFICIO_VALIDOS, start=2):
         ws_ref[f'A{i}'] = tipo
+
+    ws_ref['B1'] = 'Regimes de Reajuste Válidos'
+    ws_ref['B1'].font = Font(bold=True)
+    for i, regime in enumerate(['PARIDADE', 'MEDIA', 'NAO_DEFINIDO'], start=2):
+        ws_ref[f'B{i}'] = regime
 
     # Escreve dados
     row_fill_even = PatternFill(start_color='F0F4F8', end_color='F0F4F8', fill_type='solid')
@@ -88,8 +103,8 @@ def gerar_planilha_padronizada(dados_lista):
             if fill:
                 cell.fill = fill
 
-    # Ajusta largura das colunas
-    larguras = [20, 35, 16, 15, 20, 25, 25, 15, 15, 35, 15, 15, 15, 20, 20, 12, 40]
+    # Ajusta largura das colunas (uma entrada por coluna de COLUNAS_PLANILHA)
+    larguras = [20, 35, 16, 15, 20, 25, 25, 15, 15, 35, 15, 15, 15, 20, 20, 20, 20, 18, 18, 15, 12, 18, 18, 18, 18, 35, 40]
     for col_idx, largura in enumerate(larguras, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = largura
 

@@ -18,7 +18,7 @@
 <div style="text-align:center; margin-top:40pt; margin-bottom:30pt;">
     <div style="font-size:9pt; color:#555; letter-spacing:2pt; text-transform:uppercase;">Auditoria Técnica Previdenciária</div>
     <div style="font-size:18pt; font-weight:bold; color:#1A3A5C; margin: 8pt 0 4pt 0;">RELATÓRIO FINAL DE AUDITORIA</div>
-    <div style="font-size:11pt; color:#1A3A5C;">RPPS Barra Mansa</div>
+    <div style="font-size:11pt; color:#1A3A5C;">{{ instituto_nome }}</div>
     <div style="margin-top:10pt; font-size:8pt; color:#555;">
         Lote: <strong>{{ lote_label }}</strong> &nbsp;·&nbsp; Data: {{ data_geracao }}
     </div>
@@ -26,7 +26,7 @@
 
 <div class="section-title">1. Identificação</div>
 <table class="kv-table" style="width:70%">
-    <tr><td>Contratante</td><td>RPPS Barra Mansa</td></tr>
+    <tr><td>Contratante</td><td>{{ instituto_nome }}</td></tr>
     <tr><td>Lote</td><td>{{ lote_label }}</td></tr>
     {% if lote %}<tr><td>Status do Lote</td><td>{{ lote.get_status_display }}</td></tr>
     <tr><td>Descrição</td><td>{{ lote.descricao }}</td></tr>{% endif %}

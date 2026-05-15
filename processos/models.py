@@ -33,12 +33,17 @@ class RegimeReajuste(models.TextChoices):
 
 
 class TipoBeneficio(models.TextChoices):
-    APOS_VOLUNTARIA          = 'APOS_VOLUNTARIA',          'Aposentadoria Voluntária por Tempo de Contribuição (Integral)'
-    APOS_VOLUNTARIA_PROP     = 'APOS_VOLUNTARIA_PROP',     'Aposentadoria Voluntária por Idade (Proventos Proporcionais)'
-    APOS_INCAPACIDADE        = 'APOS_INCAPACIDADE',        'Aposentadoria por Incapacidade Permanente'
-    APOS_COMPULSORIA         = 'APOS_COMPULSORIA',         'Aposentadoria Compulsória'
-    PENSAO_MORTE             = 'PENSAO_MORTE',             'Pensão por Morte'
-    REVISAO_REENQUADRAMENTO  = 'REVISAO_REENQUADRAMENTO',  'Revisão/Reenquadramento'
+    APOS_VOLUNTARIA           = 'APOS_VOLUNTARIA',           'Aposentadoria Voluntária por Idade e Tempo de Contribuição (Integral)'
+    APOS_VOLUNTARIA_PROP      = 'APOS_VOLUNTARIA_PROP',      'Aposentadoria Voluntária por Idade e Tempo de Contribuição (Proporcional)'
+    APOS_VOLUNTARIA_POR_IDADE = 'APOS_VOLUNTARIA_POR_IDADE', 'Aposentadoria Voluntária por Idade'
+    APOS_VOLUNTARIA_PROP_IDADE= 'APOS_VOLUNTARIA_PROP_IDADE','Aposentadoria Voluntária por Idade com Proventos Proporcionais'
+    APOS_VOLUNTARIA_IDADE_TC  = 'APOS_VOLUNTARIA_IDADE_TC',  'Aposentadoria Voluntária por Idade e Tempo de Contribuição'
+    APOS_INCAPACIDADE         = 'APOS_INCAPACIDADE',         'Aposentadoria por Invalidez Permanente (Integral)'
+    APOS_INVALIDEZ_PERMANENTE = 'APOS_INVALIDEZ_PERMANENTE', 'Aposentadoria por Invalidez Permanente (Proporcional)'
+    APOS_COMPULSORIA          = 'APOS_COMPULSORIA',          'Aposentadoria Compulsória'
+    APOS_ESPECIAL_MAGISTERIO  = 'APOS_ESPECIAL_MAGISTERIO',  'Aposentadoria Especial do Magistério'
+    PENSAO_MORTE              = 'PENSAO_MORTE',              'Pensão por Morte'
+    REVISAO_REENQUADRAMENTO   = 'REVISAO_REENQUADRAMENTO',   'Revisão/Reenquadramento'
 
 
 class StatusProcesso(models.TextChoices):
@@ -104,7 +109,7 @@ class Beneficiario(models.Model):
 class Processo(models.Model):
     numero = models.CharField(max_length=100, unique=True, verbose_name='Número do Processo')
     beneficiario = models.ForeignKey(Beneficiario, on_delete=models.PROTECT, verbose_name='Beneficiário')
-    tipo_beneficio = models.CharField(max_length=30, choices=TipoBeneficio.choices, verbose_name='Tipo de Benefício')
+    tipo_beneficio = models.CharField(max_length=50, choices=TipoBeneficio.choices, verbose_name='Tipo de Benefício')
     status_processo = models.CharField(max_length=20, choices=StatusProcesso.choices, default=StatusProcesso.PENDENTE, verbose_name='Status')
     data_concessao = models.DateField(null=True, blank=True, verbose_name='Data de Concessão')
     data_publicacao = models.DateField(null=True, blank=True, verbose_name='Data de Publicação')
@@ -337,6 +342,29 @@ class CertidaoTempoContribuicao(models.Model):
         )
 
 
+class TipoDocumento(models.TextChoices):
+    CONTRACHEQUE_ATIVO   = 'CONTRACHEQUE_ATIVO',   'Contracheque Ativo'
+    CONTRACHEQUE_INATIVO = 'CONTRACHEQUE_INATIVO', 'Contracheque Inativo'
+    OUTRO                = 'OUTRO',                'Outro Documento'
+
+
+class DocumentoProcesso(models.Model):
+    """Arquivo PDF vinculado a um processo (contracheques e outros documentos)."""
+    processo      = models.ForeignKey(Processo, on_delete=models.CASCADE, related_name='documentos', verbose_name='Processo')
+    tipo          = models.CharField(max_length=30, choices=TipoDocumento.choices, verbose_name='Tipo de Documento')
+    arquivo       = models.FileField(upload_to='documentos/%Y/%m/', verbose_name='Arquivo')
+    nome_original = models.CharField(max_length=255, blank=True, verbose_name='Nome Original')
+    data_upload   = models.DateTimeField(default=timezone.now, verbose_name='Data de Upload')
+
+    class Meta:
+        verbose_name = 'Documento do Processo'
+        verbose_name_plural = 'Documentos dos Processos'
+        ordering = ['processo', 'tipo']
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} — {self.processo}'
+
+
 class ContrachequeAuditoria(models.Model):
     """
     Dados do contracheque coletados pelo auditor ao abrir o processo.
@@ -377,12 +405,31 @@ class ContrachequeAuditoria(models.Model):
         verbose_name='Data de Vigência do Reajuste Municipal'
     )
 
+    # Demonstrativo completo importado do PDF (JSON)
+    # Estrutura: {"rubricas": [{"conta","descricao","referencia","vencimento","desconto"},...],
+    #             "total_vencimentos", "total_descontos", "total_liquido",
+    #             "base_irrf", "periodo"}
+    demonstrativo_json = models.TextField(
+        blank=True, verbose_name='Demonstrativo de Pagamento (JSON)',
+        help_text='Importado automaticamente do PDF do holerite.'
+    )
+
     observacoes = models.TextField(blank=True, verbose_name='Observações')
     data_registro = models.DateTimeField(default=timezone.now, verbose_name='Data de Registro')
 
     class Meta:
         verbose_name = 'Contracheque do Processo'
         verbose_name_plural = 'Contracheques dos Processos'
+
+    def get_demonstrativo(self):
+        """Retorna o demonstrativo como dict, ou None se não importado."""
+        import json
+        if self.demonstrativo_json:
+            try:
+                return json.loads(self.demonstrativo_json)
+            except (ValueError, TypeError):
+                return None
+        return None
 
     def __str__(self):
         return f'Contracheque — {self.processo} ({self.mes_referencia})'

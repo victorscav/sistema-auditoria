@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 
 from processos.models import Processo, Lote, TipoBeneficio
 from analise.models import ConferenciaFolha, ResultadoAnalise, AchadoAuditoria
+from analise.utils import recalcular_conferencia
 from institutos.models import RegraAposentadoria
 
 
@@ -72,6 +73,13 @@ def _lote_label(lote_id):
         return '—'
 
 
+def _instituto_nome(processos_qs):
+    p = processos_qs.select_related('instituto').filter(instituto__isnull=False).first()
+    if p and p.instituto:
+        return p.instituto.nome
+    return ''
+
+
 def _resultado(p):
     return p.get_resultado_analise() or 'Pendente'
 
@@ -116,10 +124,13 @@ def index(request):
 def relatorio_analitico(request):
     qs = Processo.objects.select_related(
         'beneficiario', 'lote', 'instituto',
-        'analiseelegibilidade', 'analisecalculo', 'conferenciafolha', 'dados_beneficio'
+        'analiseelegibilidade', 'analisecalculo', 'conferenciafolha', 'dados_beneficio',
+        'contracheque',
     )
     qs, lote_id = _lote_filter(request, qs)
     processos = list(qs)
+    for p in processos:
+        recalcular_conferencia(p)
     total, n_c, n_r, n_nc, n_p, perc = _stats(processos)
 
     ctx = {
@@ -130,6 +141,7 @@ def relatorio_analitico(request):
         'n_ressalvas': n_r,
         'n_nao_conformes': n_nc,
         'n_pendentes': n_p,
+        'instituto_nome': _instituto_nome(qs),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_analitico.html', ctx), 'planilha_analitica.pdf')
 
@@ -137,10 +149,19 @@ def relatorio_analitico(request):
 # ── 2. Divergências Financeiras ───────────────────────────────────────────────
 
 def relatorio_divergencias(request):
+    lote_id = request.POST.get('lote') or None
+    # Recalcula todos os processos do lote antes de filtrar divergências
+    proc_qs = Processo.objects.select_related(
+        'dados_beneficio', 'conferenciafolha', 'contracheque', 'instituto',
+    )
+    if lote_id:
+        proc_qs = proc_qs.filter(lote_id=lote_id)
+    for p in proc_qs:
+        recalcular_conferencia(p)
+
     qs = ConferenciaFolha.objects.exclude(
         tipo_divergencia='SEM_DIVERGENCIA'
     ).select_related('processo__beneficiario', 'processo__lote', 'auditor')
-    lote_id = request.POST.get('lote') or None
     if lote_id:
         qs = qs.filter(processo__lote_id=lote_id)
 
@@ -150,11 +171,13 @@ def relatorio_divergencias(request):
         if f.impacto_financeiro_estimado
     )
 
+    inst_qs = Processo.objects.filter(lote_id=lote_id) if lote_id else Processo.objects.all()
     ctx = {
         'divergencias': divergencias,
         'total_impacto': round(total_impacto, 2),
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
+        'instituto_nome': _instituto_nome(inst_qs),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_divergencias.html', ctx), 'divergencias_financeiras.pdf')
 
@@ -206,6 +229,7 @@ def relatorio_indicadores(request):
         'por_tipo': por_tipo, 'por_lote': por_lote,
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
+        'instituto_nome': _instituto_nome(qs),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_indicadores.html', ctx), 'indicadores_conformidade.pdf')
 
@@ -215,12 +239,13 @@ def relatorio_indicadores(request):
 def relatorio_folha_inativos(request):
     qs = Processo.objects.select_related(
         'beneficiario', 'lote', 'instituto',
-        'conferenciafolha', 'dados_beneficio'
+        'conferenciafolha', 'dados_beneficio', 'contracheque',
     ).prefetch_related('achados')
     qs, lote_id = _lote_filter(request, qs)
 
     rows = []
     for p in qs:
+        recalcular_conferencia(p)
         folha = getattr(p, 'conferenciafolha', None)
         dados = getattr(p, 'dados_beneficio', None)
         div = folha.divergencia_valor if folha else None
@@ -239,6 +264,7 @@ def relatorio_folha_inativos(request):
         'processos': rows,
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
+        'instituto_nome': _instituto_nome(qs),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_folha_inativos.html', ctx), 'conferencia_folha_inativos.pdf')
 
@@ -257,10 +283,12 @@ def relatorio_recomendacoes(request):
     for a in achados:
         a.fundamentacao_combinada = _fundamentacao_combinada(a)
 
+    inst_qs = Processo.objects.filter(lote_id=lote_id) if lote_id else Processo.objects.all()
     ctx = {
         'achados': achados,
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
+        'instituto_nome': _instituto_nome(inst_qs),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_recomendacoes.html', ctx), 'recomendacoes_tecnicas.pdf')
 
@@ -278,12 +306,15 @@ def relatorio_final_lote(request):
 
     qs = Processo.objects.select_related(
         'beneficiario', 'lote', 'instituto',
-        'analiseelegibilidade', 'analisecalculo', 'conferenciafolha', 'dados_beneficio'
+        'analiseelegibilidade', 'analisecalculo', 'conferenciafolha', 'dados_beneficio',
+        'contracheque',
     ).prefetch_related('achados')
     if lote:
         qs = qs.filter(lote=lote)
 
     processos_raw = list(qs)
+    for p in processos_raw:
+        recalcular_conferencia(p)
     total, n_c, n_r, n_nc, n_p, perc = _stats(processos_raw)
 
     # Processos enriquecidos para templates
@@ -333,6 +364,7 @@ def relatorio_final_lote(request):
         'processos': processos,
         'divergencias': divergencias,
         'achados': list(achados),
+        'instituto_nome': _instituto_nome(qs),
     }
     fname = f"relatorio_final_{lote_label.replace('/', '-')}.pdf"
     return _pdf_response(_render_pdf('relatorios/pdf_final_lote.html', ctx), fname)

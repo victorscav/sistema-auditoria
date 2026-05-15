@@ -47,6 +47,12 @@
                     <input type="text" name="lei_organica" class="form-control"
                            value="{{ instituto.lei_organica|default:'' }}" placeholder="Lei Municipal 2.341/2015">
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Subsídio do Prefeito (R$)</label>
+                    <input type="number" name="subsidio_prefeito" class="form-control" step="0.01" min="0"
+                           value="{{ instituto.subsidio_prefeito|default:'' }}" placeholder="Ex: 25000.00">
+                    <small class="text-muted">Teto remuneratório dos servidores e pensionistas (art. 37, XI CF/88). Exceto procuradores municipais.</small>
+                </div>
                 <div class="col-12">
                     <label class="form-label fw-semibold">Observações</label>
                     <textarea name="observacoes" class="form-control" rows="3">{{ instituto.observacoes|default:'' }}</textarea>

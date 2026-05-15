@@ -190,7 +190,14 @@
                     <tbody>
                         {% for row in elegibilidade_rows %}
                         <tr>
-                            <td class="fw-semibold small">{{ row.label }}</td>
+                            <td class="fw-semibold small">
+                                {{ row.label }}
+                                {% if row.marco_temporal_ingresso %}
+                                <br><span class="badge bg-info text-dark mt-1" style="font-size:0.65rem;">
+                                    <i class="bi bi-calendar-check me-1"></i>Processo: {{ row.marco_temporal_ingresso|date:"d/m/Y" }}
+                                </span>
+                                {% endif %}
+                            </td>
                             <td>
                                 <select name="{{ row.field_ok }}" class="form-select form-select-sm">
                                     <option value="">-</option>
@@ -241,6 +248,32 @@
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="aba" value="calculo">
+
+            {% if eh_pensao %}
+            <div class="alert alert-secondary py-2 mb-3 d-flex align-items-center gap-3">
+                <i class="bi bi-person-x fs-5 text-secondary"></i>
+                <div class="flex-grow-1">
+                    <span class="fw-semibold small">Situação do Instituidor da Pensão</span>
+                    <div class="d-flex gap-2 mt-1">
+                        {% for val, lbl in situacao_instituidor_choices %}
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input" type="radio" name="situacao_instituidor_pensao"
+                                id="sit_{{ val }}" value="{{ val }}"
+                                {% if situacao_instituidor_pensao == val %}checked{% endif %}
+                                onchange="this.form.submit()">
+                            <label class="form-check-label small" for="sit_{{ val }}">{{ lbl }}</label>
+                        </div>
+                        {% endfor %}
+                        {% if not situacao_instituidor_pensao %}
+                        <span class="badge bg-warning text-dark align-self-center" style="font-size:0.7rem;">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Não selecionado
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="table-responsive">
                 <table class="table table-bordered">
                     <thead class="table-light">
@@ -252,8 +285,20 @@
                     </thead>
                     <tbody>
                         {% for row in calculo_rows %}
-                        <tr>
-                            <td class="fw-semibold small">{{ row.label }}</td>
+                        <tr {% if row.nao_informado %}class="table-warning"{% endif %}>
+                            <td class="fw-semibold small">
+                                {{ row.label }}
+                                {% if row.nao_informado %}
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>Não foi informado
+                                </span>
+                                {% endif %}
+                                {% if row.nota_inss %}
+                                <div class="text-muted fw-normal mt-1" style="font-size:0.75rem;">
+                                    <i class="bi bi-info-circle me-1 text-primary"></i>Use a calculadora de reajuste INSS abaixo para verificar e preencher automaticamente.
+                                </div>
+                                {% endif %}
+                            </td>
                             <td>
                                 <select name="{{ row.field_ok }}" class="form-select form-select-sm">
                                     <option value="">-</option>
@@ -269,6 +314,205 @@
                     </tbody>
                 </table>
             </div>
+            <!-- Painel: Teto Remuneratório -->
+            <div class="card border-secondary mt-3 mb-2">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <i class="bi bi-shield-fill-check text-secondary"></i>
+                        <span class="fw-semibold small">Teto Remuneratório — Subsídio do Prefeito</span>
+                        {% if is_procurador %}
+                        <span class="badge bg-warning text-dark" style="font-size:0.65rem;">Procurador — teto diferenciado</span>
+                        {% endif %}
+                    </div>
+                    {% if is_procurador %}
+                    <div class="alert alert-warning py-1 mb-0 small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Cargo identificado como <strong>Procurador Municipal</strong>. O teto remuneratório é o subsídio dos Membros do TCE ou AGU aplicável ao município (art. 37, XI c/c art. 135 CF/88). Verificar manualmente.
+                    </div>
+                    {% elif subsidio_prefeito %}
+                    <div class="row g-2 align-items-center">
+                        <div class="col-auto">
+                            <span class="text-muted small">Subsídio do Prefeito:</span>
+                            <span class="fw-bold ms-1">R$ {{ subsidio_prefeito }}</span>
+                        </div>
+                        {% if dados_beneficio and dados_beneficio.valor_concedido %}
+                        <div class="col-auto">
+                            <span class="text-muted small">Valor do benefício:</span>
+                            <span class="fw-bold ms-1">R$ {{ dados_beneficio.valor_concedido }}</span>
+                        </div>
+                        <div class="col-auto">
+                            {% if dados_beneficio.valor_concedido <= subsidio_prefeito %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Dentro do teto</span>
+                            {% else %}
+                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Supera o teto</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="text-muted small">
+                        <i class="bi bi-exclamation-circle me-1 text-warning"></i>
+                        Subsídio do Prefeito não cadastrado. <a href="/admin/institutos/instituto/" target="_blank">Cadastre no Instituto RPPS</a> para verificação automática.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Painel: Acumulação de Benefícios (Art. 24 EC 103/2019) -->
+            <div class="card border-info mt-3 mb-2" id="painelAcumulacao">
+                <div class="card-header py-2 px-3 bg-info bg-opacity-10 d-flex align-items-center gap-2">
+                    <i class="bi bi-layers-fill text-info"></i>
+                    <span class="fw-semibold small">Acumulação de Benefícios — Art. 24 EC 103/2019</span>
+                </div>
+                <div class="card-body py-3 px-3">
+                    <!-- Toggle: houve acumulação? -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small mb-1">Houve acumulação deste benefício com outro (RPPS, RGPS ou cargo ativo)?</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="houve_acumulacao" id="acum_sim" value="true"
+                                    {% if calculo and calculo.houve_acumulacao == True %}checked{% endif %}
+                                    onchange="toggleAcumulacao(true)">
+                                <label class="form-check-label" for="acum_sim">Sim</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="houve_acumulacao" id="acum_nao" value="false"
+                                    {% if calculo and calculo.houve_acumulacao == False %}checked{% endif %}
+                                    onchange="toggleAcumulacao(false)">
+                                <label class="form-check-label" for="acum_nao">Não</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="houve_acumulacao" id="acum_nd" value=""
+                                    {% if not calculo or calculo.houve_acumulacao is None %}checked{% endif %}
+                                    onchange="toggleAcumulacao(null)">
+                                <label class="form-check-label text-muted" for="acum_nd">Não informado</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detalhes (visível apenas se houve_acumulacao = true) -->
+                    <div id="detalhesAcumulacao" style="{% if not calculo or calculo.houve_acumulacao != True %}display:none{% endif %}">
+                        <hr class="my-2">
+                        <p class="small text-muted mb-2">
+                            <i class="bi bi-info-circle me-1"></i>
+                            O art. 24 da EC 103/2019 veda a percepção de mais de uma aposentadoria ou pensão pelo RPPS, salvo quando os cargos de origem sejam acumuláveis na atividade (art. 37, XVI CF/88).
+                            Mesmo nesse caso, a soma não pode superar o teto remuneratório (subsídio do Prefeito).
+                        </p>
+
+                        <!-- Cargos acumuláveis? -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small mb-1">
+                                Os cargos/empregos de origem são acumuláveis nos termos do art. 37, XVI da CF/88?
+                                <span class="text-muted fw-normal">(professor + técnico-científico, dois cargos de saúde, dois cargos privativos de médico, etc.)</span>
+                            </label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="acumulacao_cargos_acumulaveis" id="acumCargo_sim" value="true"
+                                        {% if calculo and calculo.acumulacao_cargos_acumulaveis == True %}checked{% endif %}
+                                        onchange="calcularAcumulacao()">
+                                    <label class="form-check-label" for="acumCargo_sim">Sim — cargos acumuláveis</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="acumulacao_cargos_acumulaveis" id="acumCargo_nao" value="false"
+                                        {% if calculo and calculo.acumulacao_cargos_acumulaveis == False %}checked{% endif %}
+                                        onchange="calcularAcumulacao()">
+                                    <label class="form-check-label" for="acumCargo_nao">Não — cargos não acumuláveis</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Valor total acumulado -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small mb-1">Valor total acumulado (R$)</label>
+                                <input type="number" name="acumulacao_valor_total" id="acumulacaoValorTotal"
+                                    class="form-control form-control-sm" step="0.01" min="0"
+                                    value="{{ calculo.acumulacao_valor_total|default:'' }}"
+                                    placeholder="Ex: 15000.00" onchange="calcularAcumulacao()">
+                                <small class="text-muted">Soma de todos os benefícios acumulados</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold small mb-1">Teto remuneratório (subsídio do Prefeito)</label>
+                                <div class="form-control form-control-sm bg-light">
+                                    {% if subsidio_prefeito %}
+                                    R$ {{ subsidio_prefeito }}
+                                    {% else %}
+                                    <span class="text-warning small">Não cadastrado</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <div id="resultadoAcumulacao" class="w-100"></div>
+                            </div>
+                        </div>
+
+                        <!-- Resultado calculado + campo oculto -->
+                        <input type="hidden" name="acumulacao_regular" id="acumulacaoRegularHidden"
+                            value="{{ calculo.acumulacao_regular|yesno:'true,false,' }}">
+
+                        <!-- Observações -->
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold small mb-1">Observações sobre a acumulação</label>
+                            <textarea name="acumulacao_obs" class="form-control form-control-sm" rows="2"
+                                placeholder="Descreva os benefícios acumulados, números de processo, etc.">{{ calculo.acumulacao_obs|default:'' }}</textarea>
+                        </div>
+                    </div>
+
+                    <!-- Resultado quando não há acumulação -->
+                    <div id="semAcumulacao" style="{% if calculo and calculo.houve_acumulacao == False %}{% else %}display:none{% endif %}">
+                        <div class="alert alert-success py-1 mb-0 small">
+                            <i class="bi bi-check-circle me-1"></i>
+                            Sem acumulação — situação regular quanto ao art. 24 da EC 103/2019.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if eh_pensao and teto_rgps_atual and dados_beneficio and dados_beneficio.base_calculo %}
+            <!-- Painel: Redutor Constitucional (EC 41/2003) -->
+            {% with base=dados_beneficio.base_calculo teto=teto_rgps_atual %}
+            <div class="card border-primary mt-2 mb-2">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-calculator-fill text-primary"></i>
+                        <span class="fw-semibold small">Redutor Constitucional — Pensão por Morte (EC 41/2003)</span>
+                    </div>
+                    <div class="row g-2 small">
+                        <div class="col-md-3 text-center border rounded p-2">
+                            <div class="text-muted">Base (proventos/remuneração)</div>
+                            <div class="fw-bold fs-6">R$ {{ base }}</div>
+                        </div>
+                        <div class="col-md-3 text-center border rounded p-2">
+                            <div class="text-muted">Teto RGPS vigente</div>
+                            <div class="fw-bold fs-6">R$ {{ teto }}</div>
+                        </div>
+                        {% if base > teto %}
+                        <div class="col-md-3 text-center border rounded p-2 bg-light">
+                            <div class="text-muted">Pensão esperada</div>
+                            <div class="fw-bold fs-6 text-primary" id="pensaoEsperada">calculando...</div>
+                            <div class="text-muted" style="font-size:0.7rem;">R$ {{ teto }} + 70% × (R$ {{ base }} − R$ {{ teto }})</div>
+                        </div>
+                        <div class="col-md-3 text-center border rounded p-2">
+                            <div class="text-muted">Valor concedido</div>
+                            <div class="fw-bold fs-6">R$ {{ dados_beneficio.valor_concedido|default:"—" }}</div>
+                        </div>
+                        {% else %}
+                        <div class="col-md-6">
+                            <div class="alert alert-success py-1 mb-0">
+                                <i class="bi bi-check-circle me-1"></i>
+                                Base não supera o teto RGPS — <strong>sem aplicação do redutor</strong>. Pensão = R$ {{ base }} (100% da base).
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if base > teto %}
+                    <div id="alertaRedutor" class="mt-2"></div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endwith %}
+            {% endif %}
+
             <div class="row align-items-end mt-3">
                 <div class="col-md-4">
                     <label class="form-label fw-semibold">Resultado Geral</label>
@@ -390,6 +634,45 @@
             {% if tem_reajustes %}
             <hr class="my-4">
             <h6 class="fw-semibold mb-3"><i class="bi bi-percent me-2 text-primary"></i>Verificação de Reajuste Anual (INSS)</h6>
+
+            <!-- Tabela de referência estática -->
+            <div class="mb-3">
+                <button class="btn btn-outline-secondary btn-sm mb-2" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#tabelaRefInss" aria-expanded="false">
+                    <i class="bi bi-table me-1"></i>Tabela de Reajustes INSS — Referência
+                </button>
+                <div class="collapse" id="tabelaRefInss">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm table-hover">
+                            <thead style="background:#1a3a5c; color:white;">
+                                <tr>
+                                    <th>Ano</th>
+                                    <th>Vigência</th>
+                                    <th class="text-end">% INPC (acima SM)</th>
+                                    <th class="text-end">% Piso (SM)</th>
+                                    <th class="text-end">Salário Mínimo</th>
+                                    <th class="text-end">Teto INSS</th>
+                                    <th>Base Legal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="refInssBody"></tbody>
+                        </table>
+                    </div>
+                    <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Benefícios iguais ou abaixo do salário mínimo do ano anterior recebem o <strong>% Piso</strong>; os demais recebem o <strong>% INPC</strong>.</small>
+                </div>
+            </div>
+
+            {% if eh_media and contracheque %}
+            <div class="alert alert-primary py-2 mb-3 d-flex align-items-center gap-2">
+                <i class="bi bi-file-earmark-check fs-5"></i>
+                <div>
+                    <span class="fw-semibold small">Contracheque importado — {{ mes_ref_contracheque }}</span>
+                    <span class="text-muted small ms-2">Valor: R$ {{ contracheque.valor_vencimento }}</span>
+                    <div class="text-muted" style="font-size:0.75rem;">O cálculo abaixo usará este valor como referência e aplicará apenas os reajustes até {{ ano_ref_contracheque }}.</div>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="row g-3 mb-3">
                 <div class="col-md-3">
                     <label class="form-label form-label-sm fw-semibold">Valor na Concessão (R$)</label>
@@ -399,14 +682,21 @@
                         placeholder="Ex: 1320.00">
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label form-label-sm fw-semibold">Ano Base</label>
-                    <select name="ano_base_reajuste" id="anoBase" class="form-select form-select-sm">
-                        <option value="">Selecione...</option>
-                        {% for r in reajustes_json|default:'' %}{% endfor %}
-                    </select>
+                    <label class="form-label form-label-sm fw-semibold">Ano Base (concessão)</label>
+                    <input type="number" name="ano_base_reajuste" id="anoBase"
+                        class="form-control form-control-sm"
+                        min="2000" max="2035"
+                        value="{{ ano_base_sugerido|default:'' }}"
+                        placeholder="Ex: 2019">
+                    <small class="text-muted" style="font-size:0.7rem;">Reajustes aplicados a partir do ano seguinte.</small>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label form-label-sm fw-semibold">Valor Atual Pago (R$)</label>
+                    <label class="form-label form-label-sm fw-semibold">
+                        Valor Atual (R$)
+                        {% if eh_media and contracheque %}
+                        <span class="badge bg-primary ms-1" style="font-size:0.6rem;">contracheque {{ mes_ref_contracheque }}</span>
+                        {% endif %}
+                    </label>
                     <input type="number" id="valorAtual" step="0.01"
                         class="form-control form-control-sm"
                         value="{{ valor_atual_sugerido|default:'' }}"
@@ -424,7 +714,9 @@
                     <thead style="background:#1a3a5c; color:white;">
                         <tr>
                             <th>Ano</th>
-                            <th class="text-end">% Reajuste</th>
+                            <th class="text-end">% INPC</th>
+                            <th class="text-end">% Piso</th>
+                            <th class="text-center">Índice Aplicado</th>
                             <th class="text-end">Sal. Mínimo</th>
                             <th class="text-end">Teto INSS</th>
                             <th class="text-end">Valor Esperado</th>
@@ -436,7 +728,7 @@
                     <tbody id="reajusteBody"></tbody>
                     <tfoot>
                         <tr class="table-light fw-bold">
-                            <td colspan="4">Valor esperado acumulado:</td>
+                            <td colspan="6">Valor esperado acumulado:</td>
                             <td class="text-end" id="totalEsperado">-</td>
                             <td class="text-end" id="totalReal">-</td>
                             <td colspan="2" id="totalSituacao"></td>
@@ -453,112 +745,252 @@
 
 <!-- Folha -->
 {% elif aba_ativa == 'folha' %}
-<div class="card card-stat">
+<div class="row g-3">
+
+    {# ── Bloco de reconstituição do valor ──────────────────────────────── #}
+    <div class="col-12">
+    <div class="card card-stat">
     <div class="card-body">
-        <h6 class="fw-semibold mb-3">Conferência de Folha de Pagamento</h6>
+        <h6 class="fw-semibold mb-3">Reconstituição do Valor Esperado</h6>
+
+        {% if not folha or not folha.valor_concedido %}
+        <div class="alert alert-warning">Valor concedido não encontrado nos dados do benefício. Verifique o cadastro do processo.</div>
+        {% else %}
+
+        {# Cabeçalho: valor na concessão #}
+        <div class="row g-2 mb-3 align-items-center">
+            <div class="col-auto">
+                <span class="text-muted small">Valor na concessão</span>
+                <div class="fs-5 fw-bold">R$ {{ folha.valor_concedido }}</div>
+                {% if processo.data_concessao %}<small class="text-muted">{{ processo.data_concessao|date:"d/m/Y" }}</small>{% endif %}
+            </div>
+            {% if dados_beneficio %}
+            <div class="col-auto text-muted">→</div>
+            <div class="col-auto">
+                <span class="badge {% if dados_beneficio.regime_reajuste == 'PARIDADE' %}bg-primary{% elif dados_beneficio.regime_reajuste == 'MEDIA' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                    {{ dados_beneficio.get_regime_reajuste_display }}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Tabela de reajustes (MÉDIA) #}
+        {% if dados_beneficio.regime_reajuste == 'MEDIA' %}
+            {% if passos_reajuste %}
+            <div class="table-responsive mb-3">
+            <table class="table table-sm table-bordered" style="font-size:0.82rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Ano</th>
+                        <th>Vigência</th>
+                        <th class="text-end">% Reajuste</th>
+                        <th class="text-end">Valor Anterior</th>
+                        <th class="text-end">Valor Reajustado</th>
+                        <th>Base Legal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in passos_reajuste %}
+                    <tr>
+                        <td>{{ p.ano }}</td>
+                        <td>{{ p.vigencia }}</td>
+                        <td class="text-end">{{ p.percentual }}%</td>
+                        <td class="text-end">R$ {{ p.anterior }}</td>
+                        <td class="text-end fw-semibold">R$ {{ p.novo }}</td>
+                        <td class="text-muted small">{{ p.base_legal }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <div class="alert alert-secondary py-2 small">
+                Nenhum reajuste INSS encontrado após {{ processo.data_concessao|date:"d/m/Y" }}{% if data_ref_folha %} até {{ data_ref_folha|date:"m/Y" }}{% endif %}. O valor concedido é o valor esperado atual.
+            </div>
+            {% endif %}
+
+        {# Paridade: usa leis municipais (automático) ou valor do cálculo (manual) #}
+        {% elif dados_beneficio.regime_reajuste == 'PARIDADE' %}
+            {% if passos_reajuste %}
+            <div class="table-responsive mb-3">
+            <table class="table table-sm table-bordered" style="font-size:0.82rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Lei</th>
+                        <th>Vigência</th>
+                        <th class="text-end">% Reajuste</th>
+                        <th class="text-end">Valor Anterior</th>
+                        <th class="text-end">Valor Reajustado</th>
+                        <th>Ementa</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in passos_reajuste %}
+                    <tr>
+                        <td class="fw-semibold">{{ p.lei }}</td>
+                        <td>{{ p.vigencia }}</td>
+                        <td class="text-end">{{ p.percentual }}%</td>
+                        <td class="text-end">R$ {{ p.anterior }}</td>
+                        <td class="text-end fw-semibold">R$ {{ p.novo }}</td>
+                        <td class="text-muted small">{{ p.base_legal }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% elif valor_esperado %}
+            <div class="alert alert-primary py-2 small">
+                <i class="bi bi-info-circle me-1"></i>
+                Valor reconstruído obtido da <strong>Aba de Cálculo</strong>
+                (valor devido no mês corrente / ano de referência).
+            </div>
+            {% else %}
+            <div class="alert alert-warning py-2 small">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Nenhuma lei municipal de reajuste encontrada para este instituto após a data de concessão.
+                Cadastre as leis no <strong>Instituto</strong> ou preencha o
+                <strong>Valor Devido no Mês Corrente</strong> na aba de Cálculo.
+            </div>
+            {% endif %}
+        {% endif %}
+
+        {# ── Comparativo: esperado × pago ─────────────────────────────── #}
+        <div class="row g-3 mt-1">
+            <div class="col-md-4">
+                <div class="border rounded p-3 text-center">
+                    <div class="text-muted small mb-1">Valor Esperado</div>
+                    {% if valor_esperado %}
+                    <div class="fs-5 fw-bold text-primary">R$ {{ valor_esperado }}</div>
+                    {% if data_ref_folha %}<small class="text-muted">ref. {{ data_ref_folha|date:"m/Y" }}</small>{% endif %}
+                    {% else %}
+                    <div class="text-muted">—</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded p-3 text-center">
+                    <div class="text-muted small mb-1">Valor Pago na Folha</div>
+                    {% if folha.valor_pago_folha %}
+                    <div class="fs-5 fw-bold">R$ {{ folha.valor_pago_folha }}</div>
+                    {% if data_ref_folha %}<small class="text-muted">{{ data_ref_folha|date:"m/Y" }}</small>{% endif %}
+                    {% else %}
+                    <div class="text-muted">—</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="border rounded p-3 text-center
+                    {% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}border-success{% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}border-warning{% else %}border-danger{% endif %}">
+                    <div class="text-muted small mb-1">Divergência</div>
+                    {% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}
+                        <div class="fs-5 fw-bold text-success"><i class="bi bi-check-circle me-1"></i>Sem divergência</div>
+                    {% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}
+                        <div class="fs-5 fw-bold text-warning">+ R$ {{ folha.impacto_financeiro_estimado }}</div>
+                        <small class="text-warning">Pagamento maior que o esperado</small>
+                    {% elif folha.tipo_divergencia == 'PAGAMENTO_MENOR' %}
+                        <div class="fs-5 fw-bold text-danger">- R$ {{ folha.impacto_financeiro_estimado }}</div>
+                        <small class="text-danger">Pagamento menor que o esperado</small>
+                    {% else %}
+                        <div class="text-muted">—</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    </div>
+    </div>
+
+    {# ── Resultado e observações ────────────────────────────────────────── #}
+    <div class="col-12">
+    <div class="card card-stat">
+    <div class="card-body">
+        <h6 class="fw-semibold mb-3">Resultado da Conferência</h6>
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="aba" value="folha">
-            <div class="row g-3 mb-3">
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Valor Concedido (R$)</label>
-                    <input type="number" name="valor_concedido" step="0.01" value="{{ folha.valor_concedido|default:'' }}" class="form-control form-control-sm">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Valor Pago na Folha (R$)</label>
-                    <input type="number" name="valor_pago_folha" step="0.01" value="{{ folha.valor_pago_folha|default:'' }}" class="form-control form-control-sm">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Tipo de Divergência</label>
-                    <select name="tipo_divergencia" class="form-select form-select-sm">
-                        {% for val, label in tipo_divergencia_choices %}
-                        <option value="{{ val }}" {% if folha and folha.tipo_divergencia == val %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Impacto Financeiro (R$)</label>
-                    <input type="number" name="impacto_financeiro_estimado" step="0.01" value="{{ folha.impacto_financeiro_estimado|default:'' }}" class="form-control form-control-sm">
-                </div>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-bordered">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 35%">Item de Verificação</th>
-                            <th style="width: 15%">Resultado</th>
-                            <th>Observações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in folha_rows %}
-                        <tr>
-                            <td class="fw-semibold small">{{ row.label }}</td>
-                            <td>
-                                <select name="{{ row.field_ok }}" class="form-select form-select-sm">
-                                    <option value="">-</option>
-                                    <option value="true" {% if row.value_ok == True %}selected{% endif %}>Conforme</option>
-                                    <option value="false" {% if row.value_ok == False %}selected{% endif %}>Não Conforme</option>
-                                </select>
-                            </td>
-                            <td>
-                                <input type="text" name="{{ row.field_obs }}" value="{{ row.value_obs }}" class="form-control form-control-sm" placeholder="Observações...">
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="row align-items-end mt-3">
+            <div class="row g-3 align-items-end">
                 <div class="col-md-4">
-                    <label class="form-label fw-semibold">Resultado Geral</label>
+                    <label class="form-label fw-semibold">Resultado</label>
                     <select name="resultado" class="form-select">
                         {% for val, label in resultado_choices %}
                         <option value="{{ val }}" {% if folha and folha.resultado == val %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Observações</label>
+                    <textarea name="observacoes" class="form-control" rows="2" placeholder="Registre divergências, ressalvas ou limitações documentais...">{{ folha.observacoes|default:'' }}</textarea>
+                </div>
                 <div class="col-md-auto">
                     <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-lg me-1"></i>Salvar Conferência de Folha
+                        <i class="bi bi-check-lg me-1"></i>Salvar
                     </button>
                 </div>
             </div>
         </form>
     </div>
-</div>
+    </div>
+    </div>
+
+</div>{# /row #}
 
 <!-- Nota Técnica -->
 {% elif aba_ativa == 'nota_tecnica' %}
 <div class="row g-3">
+
+    {# ── Análise técnica gerada automaticamente ─────────────────────────── #}
     <div class="col-12">
-        <div class="card card-stat">
+        <div class="card card-stat border-primary">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="fw-semibold mb-0">Nota Técnica de Auditoria</h6>
+                    <h6 class="fw-semibold mb-0 text-primary">
+                        <i class="bi bi-robot me-1"></i>Análise Técnica (gerada automaticamente)
+                    </h6>
                     <a href="{% url 'analise:nota_tecnica_pdf' processo.pk %}" class="btn btn-danger btn-sm" target="_blank">
                         <i class="bi bi-file-earmark-pdf me-1"></i>Gerar PDF
                     </a>
                 </div>
+                {% if analise_automatica %}
+                <div style="font-size:0.88rem; line-height:1.7; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:1rem;">
+                    {% for paragrafo in analise_automatica %}
+                    <p class="mb-2{% if forloop.last %} mb-0{% endif %}">{{ paragrafo }}</p>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted small fst-italic">
+                    Preencha as abas de Elegibilidade, Cálculo e Conferência de Folha para gerar a análise automática.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# ── Campos editáveis pelo auditor ──────────────────────────────────── #}
+    <div class="col-12">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3">Observações e Limitações do Auditor</h6>
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="aba" value="nota_tecnica">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Análise Técnica Narrativa</label>
-                        <small class="text-muted d-block mb-1">Descreva o resultado técnico do processo, fundamentação normativa e conclusões do auditor.</small>
-                        <textarea name="texto" class="form-control" rows="10" placeholder="Ex: O presente processo refere-se à concessão de aposentadoria voluntária...">{{ nota_tecnica.texto|default:'' }}</textarea>
+                        <label class="form-label fw-semibold">Observações Adicionais</label>
+                        <small class="text-muted d-block mb-1">Contexto, fundamentos normativos adicionais ou considerações do auditor não cobertas pela análise automática.</small>
+                        <textarea name="texto" class="form-control" rows="5"
+                            placeholder="Ex: Há pendência de regularização junto ao INSS. O período de contribuição anterior ao ingresso no RPPS foi verificado mediante CTC emitida pelo INSS em 15/03/2025...">{{ nota_tecnica.texto|default:'' }}</textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold text-danger">
                             <i class="bi bi-exclamation-triangle me-1"></i>Limitações Técnicas (cláusula 12.4)
                         </label>
                         <small class="text-muted d-block mb-1">Registre ausência ou insuficiência de documentos essenciais que limitaram a análise.</small>
-                        <textarea name="limitacao_documental" class="form-control border-danger" rows="4"
+                        <textarea name="limitacao_documental" class="form-control border-danger" rows="3"
                             placeholder="Ex: Não foi disponibilizado o histórico contributivo completo. A análise do tempo de contribuição ficou prejudicada...">{{ nota_tecnica.limitacao_documental|default:'' }}</textarea>
                     </div>
                     <div class="d-flex gap-2 align-items-center">
                         <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="bi bi-check-lg me-1"></i>Salvar Nota Técnica
+                            <i class="bi bi-check-lg me-1"></i>Salvar
                         </button>
                         {% if nota_tecnica %}
                         <small class="text-muted">Última atualização: {{ nota_tecnica.data_atualizacao|date:"d/m/Y H:i" }}</small>
@@ -568,6 +1000,7 @@
             </div>
         </div>
     </div>
+
 </div>
 
 <!-- Achados -->
@@ -652,6 +1085,7 @@
 <script>
 const PROCESSO_PK = {{ processo.pk }};
 const TIPO_BENEFICIO = "{{ processo.tipo_beneficio }}";
+const ANO_REF_CONTRACHEQUE = {{ ano_ref_contracheque|default:'null' }};
 const API_REGRAS = "{% url 'institutos:api_regras' %}";
 const API_PRE_ANALISE = `/analise/${PROCESSO_PK}/pre-analise/`;
 
@@ -677,9 +1111,14 @@ selInstituto.addEventListener('change', async () => {
         infoRegra.style.display = '';
         return;
     }
-    // Usa automaticamente a primeira regra (mais recente, por ordering do model)
+    // Usa automaticamente a primeira regra (federal prioritária para não-reformados)
     regraAtualId = data.regras[0].id;
-    txtRegra.textContent = `Regra carregada: ${data.regras[0].label}`;
+    const regra0 = data.regras[0];
+    let msgRegra = `Regra carregada: ${regra0.label}`;
+    if (!data.aderiu_ec103 && regra0.federal) {
+        msgRegra += ' — norma federal aplicada automaticamente (instituto não aderiu à EC 103/2019).';
+    }
+    txtRegra.textContent = msgRegra;
     infoRegra.style.display = '';
     btnAnalisar.disabled = false;
 });
@@ -709,6 +1148,7 @@ function aplicarPreAnalise(data) {
         requisitos_idade: ['requisitos_idade', 'requisitos_idade_obs'],
         tempo_contribuicao_ok: ['tempo_contribuicao_ok', 'tempo_contribuicao_obs'],
         tempo_servico_publico_ok: ['tempo_servico_publico_ok', 'tempo_servico_publico_obs'],
+        carreira_cargo_ok: ['carreira_cargo_ok', 'carreira_cargo_obs'],
         tempo_carreira_ok: ['tempo_carreira_ok', 'tempo_carreira_obs'],
         tempo_no_cargo_ok: ['tempo_no_cargo_ok', 'tempo_no_cargo_obs'],
         marco_temporal_ok: ['marco_temporal_ok', 'marco_temporal_obs'],
@@ -835,28 +1275,33 @@ function preencherResultado(fieldName, valor, abaAtiva) {
 
 // ── CALCULADORA DE REAJUSTE ──────────────────────────────────────────────────
 const REAJUSTE_DATA = {{ reajustes_json|safe }};
-const ANO_BASE_SUGERIDO = {{ ano_base_sugerido|default:"null" }};
 
-// Popula o select de ano base via JS (evita problema de locale nos valores)
-(function() {
-    const sel = document.getElementById('anoBase');
-    if (!sel) return;
+// Renderiza tabela de referência estática dos reajustes INSS
+function renderTabelaReferencia() {
+    const tbody = document.getElementById('refInssBody');
+    if (!tbody || REAJUSTE_DATA.length === 0) return;
+    tbody.innerHTML = '';
     REAJUSTE_DATA.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r.ano;
-        opt.textContent = r.ano;
-        if (r.ano === ANO_BASE_SUGERIDO) opt.selected = true;
-        sel.appendChild(opt);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="fw-bold">${r.ano}</td>
+            <td><small>${r.vigencia || '-'}</small></td>
+            <td class="text-end">${Number(r.pct).toFixed(2)}%</td>
+            <td class="text-end">${Number(r.pctPiso).toFixed(2)}%</td>
+            <td class="text-end">${fmt(r.sm)}</td>
+            <td class="text-end">${fmt(r.teto)}</td>
+            <td><small class="text-muted">${r.legal}</small></td>`;
+        tbody.appendChild(tr);
     });
-})();
+}
 
 function fmt(v) {
     return 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
-function calcularReajuste() {
-    const valorBaseStr = document.getElementById('valorBase').value.replace(',','.');
-    const anoBaseStr   = document.getElementById('anoBase').value;
+function calcularReajuste(anoFinalParam) {
+    const valorBaseStr  = document.getElementById('valorBase').value.replace(',','.');
+    const anoBaseStr    = document.getElementById('anoBase').value;
     const valorAtualStr = document.getElementById('valorAtual').value.replace(',','.');
 
     const valorBase  = parseFloat(valorBaseStr);
@@ -869,16 +1314,18 @@ function calcularReajuste() {
         return;
     }
 
+    // Limita ao ano do contracheque quando disponível
+    const anoFinal = anoFinalParam || ANO_REF_CONTRACHEQUE || 9999;
+
     const tabela = document.getElementById('tabelaReajuste');
     const tbody  = document.getElementById('reajusteBody');
     tabela.style.display = '';
     tbody.innerHTML = '';
 
-    // Inclui o próprio ano base + todos os posteriores para mostrar a progressão
-    const anos = REAJUSTE_DATA.filter(r => r.ano > anoBase);
+    const anos = REAJUSTE_DATA.filter(r => r.ano > anoBase && r.ano <= anoFinal);
 
     if (anos.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Nenhum reajuste cadastrado após o ano base selecionado.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3">Nenhum reajuste cadastrado após o ano base selecionado.</td></tr>';
         document.getElementById('totalEsperado').textContent = fmt(valorBase);
         document.getElementById('totalReal').textContent = temAtual ? fmt(valorAtual) : '-';
         document.getElementById('totalSituacao').innerHTML = '';
@@ -889,10 +1336,21 @@ function calcularReajuste() {
 
     let valorEsperado = valorBase;
 
+    // SM do ano imediatamente anterior ao primeiro reajuste aplicado
+    // (para determinar se o benefício está no piso no início da série)
+    const primeiroAnoIdx = REAJUSTE_DATA.findIndex(x => x.ano === anos[0].ano);
+    let smAnterior = primeiroAnoIdx > 0 ? REAJUSTE_DATA[primeiroAnoIdx - 1].sm : anos[0].sm / (1 + anos[0].pctPiso / 100);
+
     anos.forEach(r => {
-        const pct = r.pct / 100;
-        valorEsperado = valorEsperado * (1 + pct);
-        if (valorEsperado < r.sm) valorEsperado = r.sm; // piso salário mínimo
+        // Determina se o benefício está no piso (≤ SM do ano anterior ao reajuste)
+        const isPiso = valorEsperado <= smAnterior;
+        const pctAplicado = isPiso ? r.pctPiso : r.pct;
+
+        valorEsperado = valorEsperado * (1 + pctAplicado / 100);
+        if (valorEsperado < r.sm) valorEsperado = r.sm; // segurança: nunca abaixo do SM
+
+        // SM deste ano vira smAnterior para o próximo
+        smAnterior = r.sm;
 
         const diff = temAtual ? (valorAtual - valorEsperado) : null;
         const conforme = diff !== null ? Math.abs(diff) <= 1.00 : null;
@@ -901,10 +1359,16 @@ function calcularReajuste() {
         if (conforme === true)  badge = '<span class="badge bg-success">Conforme</span>';
         if (conforme === false) badge = `<span class="badge bg-danger">Dif: ${fmt(diff)}</span>`;
 
+        const indiceLabel = isPiso
+            ? `<span class="badge bg-info text-dark">${Number(r.pctPiso).toFixed(2)}% piso</span>`
+            : `<span class="badge bg-primary">${Number(r.pct).toFixed(2)}% INPC</span>`;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="fw-bold">${r.ano}</td>
             <td class="text-end">${Number(r.pct).toFixed(2)}%</td>
+            <td class="text-end">${Number(r.pctPiso).toFixed(2)}%</td>
+            <td class="text-center">${indiceLabel}</td>
             <td class="text-end">${fmt(r.sm)}</td>
             <td class="text-end">${fmt(r.teto)}</td>
             <td class="text-end fw-bold text-primary">${fmt(valorEsperado)}</td>
@@ -943,11 +1407,43 @@ function calcularReajuste() {
     }
 }
 
-// Recalcula automaticamente se já há valores salvos
+// ── REDUTOR CONSTITUCIONAL (pensão) ─────────────────────────────────────────
+{% if eh_pensao and teto_rgps_atual and dados_beneficio and dados_beneficio.base_calculo %}
+(function() {
+    const base = {{ dados_beneficio.base_calculo }};
+    const teto = {{ teto_rgps_atual }};
+    const concedido = {{ dados_beneficio.valor_concedido|default:'null' }};
+
+    if (base > teto) {
+        const excesso = base - teto;
+        const parcela = Math.round(excesso * 0.70 * 100) / 100;
+        const esperado = Math.round((teto + parcela) * 100) / 100;
+
+        const elEsperado = document.getElementById('pensaoEsperada');
+        if (elEsperado) elEsperado.textContent = 'R$ ' + esperado.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+
+        const alertaDiv = document.getElementById('alertaRedutor');
+        if (alertaDiv && concedido !== null) {
+            const diff = Math.abs(concedido - esperado);
+            const conforme = diff <= 1.00;
+            alertaDiv.innerHTML = conforme
+                ? `<div class="alert alert-success py-1 small"><i class="bi bi-check-circle me-1"></i><strong>Redutor conforme.</strong> Esperado: R$ ${esperado.toLocaleString('pt-BR',{minimumFractionDigits:2})} | Concedido: R$ ${concedido.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>`
+                : `<div class="alert alert-danger py-1 small"><i class="bi bi-x-circle me-1"></i><strong>Divergência no redutor: R$ ${diff.toLocaleString('pt-BR',{minimumFractionDigits:2})}.</strong> Esperado: R$ ${esperado.toLocaleString('pt-BR',{minimumFractionDigits:2})} | Concedido: R$ ${concedido.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>`;
+
+            // Preenche base_calculo_ok automaticamente
+            const selBase = document.querySelector('select[name="base_calculo_ok"]');
+            if (selBase && !selBase.value) selBase.value = conforme ? 'true' : 'false';
+        }
+    }
+})();
+{% endif %}
+
+// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
+    renderTabelaReferencia();
     const vb = document.getElementById('valorBase');
     const ab = document.getElementById('anoBase');
-    if (vb && ab && vb.value && ab.value) calcularReajuste();
+    if (vb && ab && vb.value && ab.value) calcularReajuste(ANO_REF_CONTRACHEQUE);
 });
 </script>
 {% endblock %}

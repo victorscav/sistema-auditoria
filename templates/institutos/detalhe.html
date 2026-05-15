@@ -47,7 +47,7 @@
                 <span class="badge bg-secondary">Inativo</span>
                 {% endif %}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <small class="text-muted d-block">Reforma EC 103/2019</small>
                 {% if instituto.aderiu_ec103_2019 %}
                 <span class="badge bg-warning text-dark">
@@ -55,6 +55,14 @@
                 </span>
                 {% else %}
                 <span class="badge bg-info text-dark">Não aderiu — normas anteriores vigentes</span>
+                {% endif %}
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted d-block">Subsídio do Prefeito (teto RPPS)</small>
+                {% if instituto.subsidio_prefeito %}
+                <span class="fw-semibold text-primary">R$ {{ instituto.subsidio_prefeito }}</span>
+                {% else %}
+                <span class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Não informado</span>
                 {% endif %}
             </div>
             {% if instituto.observacoes %}
@@ -209,5 +217,77 @@
     </table>
 </div>
 {% endif %}
+{% endif %}
+
+<!-- ── Leis Municipais de Reajuste ───────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-center mt-5 mb-3">
+    <h5 class="fw-semibold mb-0">
+        <i class="bi bi-file-earmark-text me-1 text-success"></i>
+        Leis Municipais de Reajuste
+        <span class="badge bg-success ms-2">{{ leis_municipais|length }}</span>
+    </h5>
+    <a href="{% url 'institutos:nova_lei' instituto.pk %}" class="btn btn-success btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Nova Lei
+    </a>
+</div>
+
+{% if leis_municipais %}
+<div class="table-responsive mb-4">
+    <table class="table table-bordered table-hover bg-white">
+        <thead class="table-light">
+            <tr>
+                <th>Número</th>
+                <th>Ementa</th>
+                <th>Publicação</th>
+                <th>Vigência</th>
+                <th class="text-end">% Reajuste</th>
+                <th>Índice</th>
+                <th class="text-center">Inativos</th>
+                <th class="text-center">Pensões</th>
+                <th class="text-center">PDF</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lei in leis_municipais %}
+            <tr>
+                <td class="small fw-semibold text-nowrap">Nº {{ lei.numero }}</td>
+                <td class="small">{{ lei.descricao|default:"—" }}</td>
+                <td class="small text-nowrap">{{ lei.data_publicacao|date:"d/m/Y" }}</td>
+                <td class="small text-nowrap fw-semibold">{{ lei.data_vigencia|date:"d/m/Y" }}</td>
+                <td class="small text-end fw-bold text-success">{{ lei.percentual }}%</td>
+                <td class="small">{{ lei.base_indice|default:"—" }}</td>
+                <td class="text-center">
+                    {% if lei.aplica_inativos %}<span class="badge bg-success">Sim</span>
+                    {% else %}<span class="badge bg-secondary">Não</span>{% endif %}
+                </td>
+                <td class="text-center">
+                    {% if lei.aplica_pensoes %}<span class="badge bg-success">Sim</span>
+                    {% else %}<span class="badge bg-secondary">Não</span>{% endif %}
+                </td>
+                <td class="text-center">
+                    {% if lei.arquivo %}
+                    <a href="{{ lei.arquivo.url }}" target="_blank" class="btn btn-outline-danger btn-sm" title="Ver PDF">
+                        <i class="bi bi-file-pdf"></i>
+                    </a>
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                    <a href="{% url 'institutos:editar_lei' lei.pk %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-4 text-muted mb-4">
+    <p>Nenhuma lei de reajuste cadastrada para este instituto.</p>
+    <a href="{% url 'institutos:nova_lei' instituto.pk %}" class="btn btn-success btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Cadastrar primeira lei
+    </a>
+</div>
 {% endif %}
 {% endblock %}

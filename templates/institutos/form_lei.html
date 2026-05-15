@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ acao }} Lei Municipal{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'institutos:lista' %}">Institutos</a></li>
+<li class="breadcrumb-item"><a href="{% url 'institutos:detalhe' instituto.pk %}">{{ instituto.nome }}</a></li>
+<li class="breadcrumb-item active">{{ acao }} Lei Municipal</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0">{{ acao }} Lei Municipal de Reajuste</h4>
+    <a href="{% url 'institutos:detalhe' instituto.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Cancelar
+    </a>
+</div>
+
+<div class="card card-stat" style="max-width: 800px;">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="row g-3">
+
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Número da Lei <span class="text-danger">*</span></label>
+                    <input type="text" name="numero" class="form-control" required
+                           value="{{ lei.numero|default:'' }}" placeholder="Ex: 1.582/2025">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Data de Publicação <span class="text-danger">*</span></label>
+                    <input type="date" name="data_publicacao" class="form-control" required
+                           value="{{ lei.data_publicacao|date:'Y-m-d'|default:'' }}">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Data de Vigência <span class="text-danger">*</span></label>
+                    <input type="date" name="data_vigencia" class="form-control" required
+                           value="{{ lei.data_vigencia|date:'Y-m-d'|default:'' }}">
+                    <div class="form-text">Efeitos financeiros a partir de</div>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Ementa</label>
+                    <input type="text" name="descricao" class="form-control"
+                           value="{{ lei.descricao|default:'' }}"
+                           placeholder="Resumo da lei (facultativo)">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">% Reajuste <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="text" name="percentual" class="form-control" required
+                               value="{{ lei.percentual|default:'' }}" placeholder="Ex: 4,83">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Índice de Referência</label>
+                    <input type="text" name="base_indice" class="form-control"
+                           value="{{ lei.base_indice|default:'' }}" placeholder="Ex: IPCA 2024">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Arquivo PDF</label>
+                    <input type="file" name="arquivo" class="form-control" accept=".pdf">
+                    {% if lei.arquivo %}
+                    <div class="form-text">
+                        Atual: <a href="{{ lei.arquivo.url }}" target="_blank">Ver PDF</a>
+                        (envie novo para substituir)
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Fundamento Legal</label>
+                    <textarea name="base_legal" class="form-control" rows="2"
+                              placeholder="Art. da lei que concede o reajuste">{{ lei.base_legal|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" name="aplica_inativos" id="aplica_inativos"
+                               {% if lei.aplica_inativos or not lei %}checked{% endif %}>
+                        <label class="form-check-label fw-semibold" for="aplica_inativos">
+                            Aplica-se a proventos de inatividade (aposentados)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="form-check form-switch mt-2">
+                        <input class="form-check-input" type="checkbox" name="aplica_pensoes" id="aplica_pensoes"
+                               {% if lei.aplica_pensoes or not lei %}checked{% endif %}>
+                        <label class="form-check-label fw-semibold" for="aplica_pensoes">
+                            Aplica-se a pensões por morte
+                        </label>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Observações</label>
+                    <textarea name="observacoes" class="form-control" rows="2">{{ lei.observacoes|default:'' }}</textarea>
+                </div>
+
+                <div class="col-12 d-flex gap-2 mt-2">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg me-1"></i>Salvar Lei
+                    </button>
+                    <a href="{% url 'institutos:detalhe' instituto.pk %}" class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+                    {% if lei %}
+                    <button type="button" class="btn btn-outline-danger ms-auto"
+                            onclick="if(confirm('Excluir esta lei?')) window.location='{% url 'institutos:excluir_lei' lei.pk %}'">
+                        <i class="bi bi-trash me-1"></i>Excluir
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
