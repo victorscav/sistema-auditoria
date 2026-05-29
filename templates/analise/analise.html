@@ -206,7 +206,7 @@
                                 </select>
                             </td>
                             <td>
-                                <input type="text" name="{{ row.field_obs }}" value="{{ row.value_obs }}" class="form-control form-control-sm" placeholder="Observações...">
+                                <textarea name="{{ row.field_obs }}" class="form-control form-control-sm" rows="3" placeholder="Observações...">{{ row.value_obs }}</textarea>
                             </td>
                         </tr>
                         {% endfor %}
@@ -307,7 +307,7 @@
                                 </select>
                             </td>
                             <td>
-                                <input type="text" name="{{ row.field_obs }}" value="{{ row.value_obs }}" class="form-control form-control-sm" placeholder="Observações...">
+                                <textarea name="{{ row.field_obs }}" class="form-control form-control-sm" rows="3" placeholder="Observações...">{{ row.value_obs }}</textarea>
                             </td>
                         </tr>
                         {% endfor %}
@@ -1085,6 +1085,7 @@
 <script>
 const PROCESSO_PK = {{ processo.pk }};
 const TIPO_BENEFICIO = "{{ processo.tipo_beneficio }}";
+const REGIME_REAJUSTE = "{{ processo.dados_beneficio.regime_reajuste|default:'' }}";
 const ANO_REF_CONTRACHEQUE = {{ ano_ref_contracheque|default:'null' }};
 const API_REGRAS = "{% url 'institutos:api_regras' %}";
 const API_PRE_ANALISE = `/analise/${PROCESSO_PK}/pre-analise/`;
@@ -1103,7 +1104,7 @@ selInstituto.addEventListener('change', async () => {
     infoRegra.style.display = 'none';
     if (!id) return;
 
-    const resp = await fetch(`${API_REGRAS}?instituto_id=${id}&tipo_beneficio=${TIPO_BENEFICIO}`);
+    const resp = await fetch(`${API_REGRAS}?instituto_id=${id}&tipo_beneficio=${TIPO_BENEFICIO}&regime_reajuste=${REGIME_REAJUSTE}`);
     const data = await resp.json();
 
     if (data.regras.length === 0) {

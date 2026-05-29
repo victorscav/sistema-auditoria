@@ -31,7 +31,7 @@ def _parse_bool(value):
 
 
 def analise(request, processo_pk):
-    processo = get_object_or_404(Processo.objects.select_related('beneficiario'), pk=processo_pk)
+    processo = get_object_or_404(Processo.objects.select_related('beneficiario', 'contracheque', 'dados_beneficio'), pk=processo_pk)
     aba_ativa = request.GET.get('aba', 'elegibilidade')
 
     elegibilidade = getattr(processo, 'analiseelegibilidade', None)

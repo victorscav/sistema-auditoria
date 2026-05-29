@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.db import models
 from processos.models import ReajusteINSS
 
 
@@ -276,18 +277,39 @@ def gerar_analise_tecnica(processo, elegibilidade, calculo, folha,
 def calcular_valor_esperado(processo):
     """
     Calcula valor_esperado da conferência de folha com base no regime de reajuste.
-    MÉDIA  → aplica índices INSS após data_concessao até data_ref.
-    PARIDADE → aplica leis municipais do instituto após data_concessao até data_ref.
+    MÉDIA + piso → valor esperado = salário mínimo vigente (não aplica tabela INSS).
+    MÉDIA acima  → aplica índices INSS após data_concessao até data_ref.
+    PARIDADE     → aplica leis municipais do instituto após data_concessao até data_ref.
     Retorna (valor_esperado: Decimal|None, passos: list[dict]).
     """
+    import datetime as _dt
     dados = getattr(processo, 'dados_beneficio', None)
     contracheque = getattr(processo, 'contracheque', None)
 
     if not dados or not dados.valor_concedido or not processo.data_concessao:
         return None, []
 
-    data_ref = contracheque.mes_referencia if contracheque else None
+    # valor_pago_folha reflete o pagamento corrente (ano atual); contracheque pode ser antigo.
+    contracheque_ref = contracheque.mes_referencia if contracheque else None
+    if dados.valor_pago_folha:
+        data_ref = _dt.date.today()
+    else:
+        data_ref = contracheque_ref
     regime = dados.regime_reajuste
+    valor_base = Decimal(str(dados.valor_concedido))
+    ano_base = processo.data_concessao.year
+
+    # Detecta se o benefício foi concedido no salário mínimo
+    sm_concessao_obj = ReajusteINSS.objects.filter(ano__lte=ano_base).order_by('-ano').first()
+    sm_concessao = sm_concessao_obj.salario_minimo if sm_concessao_obj else None
+    is_salario_minimo = sm_concessao is not None and abs(valor_base - sm_concessao) <= Decimal('1.00')
+
+    if regime == 'MEDIA' and is_salario_minimo:
+        # Benefício no piso: valor esperado é o SM vigente, não índice INSS
+        ano_ref = data_ref.year if data_ref else _dt.date.today().year
+        sm_atual_obj = ReajusteINSS.objects.filter(ano__lte=ano_ref).order_by('-ano').first()
+        sm_atual = sm_atual_obj.salario_minimo if sm_atual_obj else None
+        return sm_atual, []
 
     if regime == 'MEDIA' and data_ref:
         return _calcular_media(dados.valor_concedido, processo.data_concessao, data_ref)
@@ -306,13 +328,14 @@ def _calcular_media(valor_base, data_concessao, data_ref):
     valor = Decimal(str(valor_base))
     passos = []
     for r in reajustes:
-        fator = Decimal('1') + r.percentual_acima_minimo / Decimal('100')
+        pct = r.percentual_para(data_concessao)
+        fator = Decimal('1') + pct / Decimal('100')
         anterior = valor
         valor = (valor * fator).quantize(Decimal('0.01'))
         passos.append({
             'ano':        r.ano,
             'vigencia':   r.vigencia.strftime('%m/%Y'),
-            'percentual': float(r.percentual_acima_minimo),
+            'percentual': float(pct),
             'anterior':   float(anterior),
             'novo':       float(valor),
             'base_legal': r.base_legal,
@@ -325,11 +348,18 @@ def _calcular_paridade(processo, valor_concedido, data_ref):
     is_pensao = (processo.tipo_beneficio == 'PENSAO_MORTE')
     filtro = {'aplica_pensoes': True} if is_pensao else {'aplica_inativos': True}
 
+    # A lei só se aplica se o benefício existia ANTES da publicação da lei
+    # (quem se aposenta após a publicação já incorpora o novo salário, sem direito a reajuste).
+    # Fallback: usa data_vigencia quando data_publicacao não está preenchida.
     leis_qs = LeiMunicipalReajuste.objects.filter(
         instituto_id=processo.instituto_id,
-        data_vigencia__gt=processo.data_concessao,
-        data_vigencia__lte=data_ref,
         **filtro,
+    ).filter(
+        # publicação após a concessão → beneficiário existia antes da lei
+        models.Q(data_publicacao__isnull=False, data_publicacao__gt=processo.data_concessao)
+        | models.Q(data_publicacao__isnull=True,  data_vigencia__gt=processo.data_concessao)
+    ).filter(
+        data_vigencia__lte=data_ref,
     ).order_by('data_vigencia')
 
     if not leis_qs.exists():
@@ -388,10 +418,20 @@ def recalcular_conferencia(processo):
         folha.valor_esperado = valor_esperado
         changed = True
 
-    base_comp = valor_esperado or folha.valor_concedido
-    if base_comp and folha.valor_pago_folha:
+    # Só compara quando há um valor_esperado calculado.
+    # Para PARIDADE sem lei aplicável, valor_esperado=None: o pagamento é correto por
+    # definição (concessão já incorpora o salário reajustado), sem referência confiável.
+    base_comp = valor_esperado
+    if base_comp is not None and folha.valor_pago_folha:
         diff = folha.valor_pago_folha - base_comp
-        tol = Decimal('0.01')
+        # Benefício no piso usa tolerância de R$ 1,00 (SM pode diferir em centavos por arredondamento)
+        sm_concessao_obj = ReajusteINSS.objects.filter(
+            ano__lte=processo.data_concessao.year
+        ).order_by('-ano').first() if processo.data_concessao else None
+        sm_concessao_rc = sm_concessao_obj.salario_minimo if sm_concessao_obj else None
+        is_piso_rc = (sm_concessao_rc is not None
+                      and abs(Decimal(str(folha.valor_concedido)) - sm_concessao_rc) <= Decimal('1.00'))
+        tol = Decimal('1.00') if is_piso_rc else Decimal('0.01')
         if diff > tol:
             novo_tipo = ConferenciaFolha.TipoDivergencia.PAGAMENTO_MAIOR
             novo_impact = diff
@@ -405,6 +445,13 @@ def recalcular_conferencia(processo):
         if folha.tipo_divergencia != novo_tipo or folha.impacto_financeiro_estimado != novo_impact:
             folha.tipo_divergencia = novo_tipo
             folha.impacto_financeiro_estimado = novo_impact
+            changed = True
+
+    elif base_comp is None:
+        # Sem referência calculada: zera qualquer divergência antiga para não enganar
+        if folha.tipo_divergencia != ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA:
+            folha.tipo_divergencia = ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA
+            folha.impacto_financeiro_estimado = Decimal('0.00')
             changed = True
 
     if changed:

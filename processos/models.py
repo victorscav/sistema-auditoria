@@ -192,6 +192,15 @@ class ReajusteINSS(models.Model):
     salario_minimo = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Salário Mínimo (R$)')
     teto_inss = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Teto INSS (R$)')
     base_legal = models.CharField(max_length=200, blank=True, verbose_name='Base Legal')
+    fatores_pro_rata = models.JSONField(
+        default=dict, blank=True,
+        verbose_name='Fatores Pro-Rata por Mês de Concessão',
+        help_text=(
+            'Para benefícios concedidos no ano anterior ao reajuste. '
+            'Chave: mês de concessão (1–12). Valor: percentual de reajuste. '
+            'Ex: {"1": 3.90, "2": 3.90, "3": 2.38, ...}'
+        ),
+    )
 
     class Meta:
         verbose_name = 'Reajuste INSS'
@@ -200,6 +209,26 @@ class ReajusteINSS(models.Model):
 
     def __str__(self):
         return f'Reajuste INSS {self.ano} ({self.percentual_acima_minimo}%)'
+
+    def percentual_para(self, data_concessao):
+        """
+        Retorna o percentual correto de reajuste considerando pro-rata.
+        - Benefícios do ano anterior (ano - 1): busca pelo mês de concessão.
+        - Benefícios de anos anteriores (< ano - 1): busca pela chave "0"
+          (esses já receberam um pro-rata parcial no reajuste anterior e agora
+          recebem o fator equivalente a "até janeiro" do ano corrente).
+        """
+        from decimal import Decimal as _D
+        if not data_concessao or not self.fatores_pro_rata:
+            return self.percentual_acima_minimo
+        if data_concessao.year == self.ano - 1:
+            chave = str(data_concessao.month)
+            if chave in self.fatores_pro_rata:
+                return _D(str(self.fatores_pro_rata[chave]))
+        elif data_concessao.year < self.ano - 1:
+            if '0' in self.fatores_pro_rata:
+                return _D(str(self.fatores_pro_rata['0']))
+        return self.percentual_acima_minimo
 
 
 class DadosBeneficio(models.Model):
@@ -421,15 +450,57 @@ class ContrachequeAuditoria(models.Model):
         verbose_name = 'Contracheque do Processo'
         verbose_name_plural = 'Contracheques dos Processos'
 
+    # Contas classificadas como desconto nos holerites do RPPS Mangaratiba
+    _CONTAS_DESCONTO = {'1021', '1025', '1630', '1631', '1632', '1640', '1641'}
+
     def get_demonstrativo(self):
-        """Retorna o demonstrativo como dict, ou None se não importado."""
+        """Retorna o demonstrativo como dict, ou None se não importado.
+
+        Normaliza rubricas que vieram com a chave 'valor' (import antigo)
+        classificando-as em vencimento/desconto e calcula totais.
+        """
         import json
-        if self.demonstrativo_json:
+        from decimal import Decimal, InvalidOperation
+
+        if not self.demonstrativo_json:
+            return None
+        try:
+            demo = json.loads(self.demonstrativo_json)
+        except (ValueError, TypeError):
+            return None
+
+        def _parse(v):
+            if not v:
+                return Decimal('0')
             try:
-                return json.loads(self.demonstrativo_json)
-            except (ValueError, TypeError):
-                return None
-        return None
+                return Decimal(str(v).replace('.', '').replace(',', '.'))
+            except InvalidOperation:
+                return Decimal('0')
+
+        rubricas = demo.get('rubricas', [])
+        for r in rubricas:
+            if 'vencimento' not in r and 'desconto' not in r:
+                conta = str(r.get('conta', ''))
+                valor = r.get('valor', '')
+                if conta in self._CONTAS_DESCONTO:
+                    r['desconto'] = valor
+                    r['vencimento'] = ''
+                else:
+                    r['vencimento'] = valor
+                    r['desconto'] = ''
+
+        if 'total_vencimentos' not in demo:
+            total_v = sum(_parse(r.get('vencimento')) for r in rubricas)
+            total_d = sum(_parse(r.get('desconto')) for r in rubricas)
+            liquido = total_v - total_d
+            def _fmt(v):
+                return f"{v:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            demo['total_vencimentos'] = _fmt(total_v)
+            demo['total_descontos'] = _fmt(total_d)
+            demo['total_liquido'] = _fmt(liquido)
+
+        demo['rubricas'] = rubricas
+        return demo
 
     def __str__(self):
         return f'Contracheque — {self.processo} ({self.mes_referencia})'

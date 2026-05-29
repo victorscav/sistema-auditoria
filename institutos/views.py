@@ -263,8 +263,9 @@ _TIPOS_EQUIVALENTES = {
 
 def regras_por_tipo(request):
     """AJAX: retorna regras de um instituto filtradas por tipo_beneficio."""
-    instituto_id = request.GET.get('instituto_id')
-    tipo = request.GET.get('tipo_beneficio')
+    instituto_id  = request.GET.get('instituto_id')
+    tipo          = request.GET.get('tipo_beneficio')
+    regime_req    = request.GET.get('regime_reajuste', '')   # PARIDADE | MEDIA | ''
     if not instituto_id:
         return JsonResponse({'regras': []})
 
@@ -280,12 +281,25 @@ def regras_por_tipo(request):
 
     regras = list(qs)
 
+    # Regras compatíveis com o regime do processo ficam no topo.
+    # PARIDADE → criterio_reajuste contém "PARIDADE"; MEDIA → contém índice (INPC/IPCA/INSS).
+    def _regime_score(r):
+        cr = (r.criterio_reajuste or '').upper()
+        if regime_req == 'PARIDADE':
+            return 0 if 'PARIDADE' in cr else 1
+        if regime_req == 'MEDIA':
+            return 0 if 'PARIDADE' not in cr else 1
+        return 0  # sem preferência
+
     # Institutos que não aderiram à EC 103/2019 seguem as normas federais anteriores
-    # (EC 47/2005, EC 41/2003, CF/88). Essas normas têm prioridade na seleção automática.
+    # (EC 47/2005, EC 41/2003, CF/88). Essas normas têm prioridade na seleção automática,
+    # mas match exato de tipo e compatibilidade de regime vêm antes de equivalência/federal.
     if not instituto.aderiu_ec103_2019:
         regras.sort(key=lambda r: (
-            0 if r.norma_federal else 1,       # federais primeiro
-            -(r.vigente_desde.toordinal()),    # mais recente primeiro dentro de cada grupo
+            0 if r.tipo_beneficio == tipo else 1,  # match exato antes de equivalentes
+            _regime_score(r),                       # regra compatível com regime do processo
+            0 if r.norma_federal else 1,            # federais antes de municipais
+            -(r.vigente_desde.toordinal()),         # mais recente primeiro
         ))
 
     data = [{'id': r.pk, 'label': str(r), 'federal': r.norma_federal} for r in regras]

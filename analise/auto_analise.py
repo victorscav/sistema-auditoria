@@ -200,8 +200,8 @@ def executar_pre_analise(processo, regra):
                   f'{"CONFORME" if tc_val else "NÃO CONFORME"}.')
     elif tc_min is None:
         # Para aposentadoria proporcional por idade, TC não é requisito mínimo
-        # mas é obrigatório para calcular a proporcionalidade
-        if processo.tipo_beneficio == 'APOS_VOLUNTARIA_PROP':
+        # mas é obrigatório para calcular a proporcionalidade (Art. 78, I-III LC 33/2014)
+        if processo.tipo_beneficio in ('APOS_VOLUNTARIA_PROP', 'APOS_VOLUNTARIA_PROP_IDADE'):
             total_anos = (anos_proprio or 0) + averbado_anos
             total_dias = int(total_anos * 365)
             if total_anos > 0:
@@ -210,7 +210,8 @@ def executar_pre_analise(processo, regra):
                 perc = min(100.0, total_anos * 365 / dias_int * 100)
                 total_display = _fmt_amd(*_dias_para_amd(total_dias))
                 tc_val = True  # Não há mínimo — conforme por definição
-                linhas = [f'Aposentadoria por Idade — sem TC mínimo exigido (Art. 78 LC 33/2014).']
+                norma_ref = regra.norma_base.split('—')[0].strip() if regra and regra.norma_base else 'Art. 78 LC 33/2014'
+                linhas = [f'Aposentadoria por Idade — sem TC mínimo exigido ({norma_ref}).']
                 if anos_proprio:
                     linhas.append(f'Tempo próprio: {dados.tempo_contribuicao} ({anos_proprio:.1f} anos).')
                 if averbado_dias:
@@ -221,7 +222,7 @@ def executar_pre_analise(processo, regra):
                 tc_obs = ' '.join(linhas)
             else:
                 tc_val = None
-                tc_obs = ('Aposentadoria por Idade — TC não é requisito mínimo (Art. 78). '
+                tc_obs = (f'Aposentadoria por Idade — TC não é requisito mínimo. '
                           'Informe o tempo de contribuição para que o sistema calcule a proporcionalidade.')
         else:
             tc_val = None
@@ -535,8 +536,9 @@ def executar_pre_analise(processo, regra):
 
             if prop_result and not regra.integralidade:
                 perc_calc, dias_serv, dias_int = prop_result
-                # Usa percentual importado se disponível, senão o calculado
-                perc_usar = Decimal(str(perc_importado)) if perc_importado else perc_calc
+                # proporcionalidade_percentual é armazenada como fração decimal (0.7986 = 79,86%)
+                # perc_calc já está em escala 0-100; normaliza perc_importado para a mesma escala
+                perc_usar = Decimal(str(perc_importado)) * 100 if perc_importado else perc_calc
                 valor_esperado = (media_dec * perc_usar / 100).quantize(Decimal('0.01'))
 
                 complemento_salmin = sal_min is not None and valor_esperado < sal_min and abs(valor - sal_min) <= tol
@@ -593,72 +595,120 @@ def executar_pre_analise(processo, regra):
         integ_val = None
         integ_obs = 'Integralidade não informada no processo ou na regra.'
 
-    # reajuste — regime MÉDIA: aplica índices INSS acumulados e compara com contracheque
+    # reajuste — regime MÉDIA: detecta se benefício está no salário mínimo e ramifica
     from processos.models import ReajusteINSS as _RINSS
     import datetime as _dt
     if dados and dados.regime_reajuste == _RR.MEDIA and dados.valor_concedido and processo.data_concessao:
         contracheque = getattr(processo, 'contracheque', None)
-        valor_atual = None
-        mes_ref = None
-        fonte_atual = ''
-        if contracheque and contracheque.valor_vencimento:
-            valor_atual = Decimal(str(contracheque.valor_vencimento))
-            mes_ref = contracheque.mes_referencia
-            fonte_atual = f'contracheque {mes_ref.strftime("%m/%Y")}'
-        elif dados.valor_pago_folha:
+        mes_ref = contracheque.mes_referencia if (contracheque and contracheque.mes_referencia) else None
+        # valor_pago_folha é a fonte principal — reflete o pagamento real corrente
+        if dados.valor_pago_folha:
             valor_atual = Decimal(str(dados.valor_pago_folha))
             fonte_atual = 'folha de pagamento'
+        elif contracheque and contracheque.valor_vencimento:
+            valor_atual = Decimal(str(contracheque.valor_vencimento))
+            fonte_atual = f'contracheque {mes_ref.strftime("%m/%Y")}' if mes_ref else 'contracheque'
+        else:
+            valor_atual = None
+            fonte_atual = ''
 
         valor_base = Decimal(str(dados.valor_concedido))
         ano_base = processo.data_concessao.year
-        ano_final = mes_ref.year if mes_ref else _dt.date.today().year
+        # valor_pago_folha reflete o pagamento corrente (ano atual); contracheque pode ser antigo.
+        if dados.valor_pago_folha:
+            ano_final = _dt.date.today().year
+        else:
+            ano_final = mes_ref.year if mes_ref else _dt.date.today().year
 
-        reajustes_qs = _RINSS.objects.filter(ano__gt=ano_base, ano__lte=ano_final).order_by('ano')
+        # Detecta se o benefício foi concedido no salário mínimo
+        sm_concessao_obj = _RINSS.objects.filter(ano__lte=ano_base).order_by('-ano').first()
+        sm_concessao = sm_concessao_obj.salario_minimo if sm_concessao_obj else None
+        is_salario_minimo = sm_concessao is not None and abs(valor_base - sm_concessao) <= Decimal('1.00')
 
-        sm_ref_obj = _RINSS.objects.filter(ano__lte=ano_base).order_by('-ano').first()
-        sm_anterior = sm_ref_obj.salario_minimo if sm_ref_obj else Decimal('0')
+        if is_salario_minimo:
+            # Benefício no piso: reajuste segue o salário mínimo nacional, não a tabela INSS.
+            # Usa valor_pago_folha como referência principal (reflete o SM vigente na folha).
+            valor_ref_sm = (Decimal(str(dados.valor_pago_folha)) if dados.valor_pago_folha
+                            else valor_atual)
+            fonte_ref_sm = 'folha de pagamento' if dados.valor_pago_folha else fonte_atual
 
-        valor_esperado = valor_base
-        aplicados = []
-        for r in reajustes_qs:
-            is_piso = valor_esperado <= sm_anterior
-            pct = r.percentual_piso if is_piso else r.percentual_acima_minimo
-            valor_esperado = valor_esperado * (1 + pct / Decimal('100'))
-            if valor_esperado < r.salario_minimo:
-                valor_esperado = r.salario_minimo
-            sm_anterior = r.salario_minimo
-            aplicados.append(f'{r.ano}: {float(pct):.2f}% ({r.base_legal})')
+            sm_atual_obj = _RINSS.objects.filter(ano__lte=ano_final).order_by('-ano').first()
+            sm_atual = sm_atual_obj.salario_minimo if sm_atual_obj else None
 
-        valor_esperado = valor_esperado.quantize(Decimal('0.01'))
-
-        if valor_atual is not None:
-            diff = abs(valor_atual - valor_esperado)
-            reaj_val = diff <= Decimal('1.00')
-            if aplicados:
+            if valor_ref_sm is not None and sm_atual is not None:
+                diff = abs(valor_ref_sm - sm_atual)
+                reaj_val = diff <= Decimal('1.00')
                 reaj_obs = (
-                    f'Regime MÉDIA — reajuste INSS acumulado. '
-                    f'Valor na concessão ({ano_base}): R$ {valor_base}. '
-                    f'Índices aplicados: {" | ".join(aplicados)}. '
-                    f'Valor esperado: R$ {valor_esperado}. '
-                    f'Valor atual ({fonte_atual}): R$ {valor_atual}. '
-                    + ('CONFORME.' if reaj_val else f'NÃO CONFORME — divergência de R$ {diff:.2f}.')
+                    f'Benefício concedido no salário mínimo: R$ {valor_base} (SM/{ano_base}). '
+                    f'Reajuste deve igualar o salário mínimo nacional — não se aplica tabela INSS (Art. 201, §4º CF/88). '
+                    f'Salário mínimo vigente ({ano_final}): R$ {sm_atual}. '
+                    f'Valor atual ({fonte_ref_sm}): R$ {valor_ref_sm}. '
+                    + ('CONFORME.' if reaj_val else
+                       f'NÃO CONFORME — valor pago difere do salário mínimo em R$ {diff:.2f}.')
+                )
+            elif sm_atual is None:
+                reaj_val = None
+                reaj_obs = (
+                    f'Benefício concedido no salário mínimo: R$ {valor_base} (SM/{ano_base}). '
+                    'Reajuste deve igualar o salário mínimo nacional. '
+                    f'Salário mínimo de {ano_final} não cadastrado — verifique a tabela de Reajustes INSS.'
                 )
             else:
-                diff_base = abs(valor_atual - valor_base)
-                reaj_val = diff_base <= Decimal('1.00')
+                reaj_val = None
                 reaj_obs = (
-                    f'Regime MÉDIA — sem reajustes INSS cadastrados entre {ano_base} e {ano_final}. '
-                    f'Valor na concessão: R$ {valor_base}. '
-                    f'Valor atual ({fonte_atual}): R$ {valor_atual}. '
-                    + ('CONFORME — sem reajuste a aplicar no período.' if reaj_val
-                       else f'NÃO CONFORME — divergência de R$ {diff_base:.2f} sem reajuste previsto.')
+                    f'Benefício concedido no salário mínimo: R$ {valor_base} (SM/{ano_base}). '
+                    'Valor atual não disponível — informe o valor pago na folha para verificação.'
                 )
         else:
-            reaj_val = None
-            reaj_obs = (
-                'Regime MÉDIA: valor atual não disponível para verificação automática. '
-                'Importe o contracheque do beneficiário na tela do processo ou informe o valor pago na folha.'
-            )
+            # Benefício acima do piso: aplica índices INSS acumulados
+            reajustes_qs = _RINSS.objects.filter(ano__gt=ano_base, ano__lte=ano_final).order_by('ano')
+
+            sm_anterior = sm_concessao if sm_concessao else Decimal('0')
+
+            valor_esperado = valor_base
+            aplicados = []
+            for r in reajustes_qs:
+                is_piso = valor_esperado <= sm_anterior
+                if is_piso:
+                    pct = r.percentual_piso
+                else:
+                    pct = r.percentual_para(processo.data_concessao)
+                valor_esperado = valor_esperado * (1 + pct / Decimal('100'))
+                if valor_esperado < r.salario_minimo:
+                    valor_esperado = r.salario_minimo
+                sm_anterior = r.salario_minimo
+                aplicados.append(f'{r.ano}: {float(pct):.2f}% ({r.base_legal})')
+
+            valor_esperado = valor_esperado.quantize(Decimal('0.01'))
+
+            if valor_atual is not None:
+                diff = abs(valor_atual - valor_esperado)
+                reaj_val = diff <= Decimal('1.00')
+                if aplicados:
+                    reaj_obs = (
+                        f'Regime MÉDIA — reajuste INSS acumulado. '
+                        f'Valor na concessão ({ano_base}): R$ {valor_base}. '
+                        f'Índices aplicados: {" | ".join(aplicados)}. '
+                        f'Valor esperado: R$ {valor_esperado}. '
+                        f'Valor atual ({fonte_atual}): R$ {valor_atual}. '
+                        + ('CONFORME.' if reaj_val else f'NÃO CONFORME — divergência de R$ {diff:.2f}.')
+                    )
+                else:
+                    diff_base = abs(valor_atual - valor_base)
+                    reaj_val = diff_base <= Decimal('1.00')
+                    reaj_obs = (
+                        f'Regime MÉDIA — sem reajustes INSS cadastrados entre {ano_base} e {ano_final}. '
+                        f'Valor na concessão: R$ {valor_base}. '
+                        f'Valor atual ({fonte_atual}): R$ {valor_atual}. '
+                        + ('CONFORME — sem reajuste a aplicar no período.' if reaj_val
+                           else f'NÃO CONFORME — divergência de R$ {diff_base:.2f} sem reajuste previsto.')
+                    )
+            else:
+                reaj_val = None
+                reaj_obs = (
+                    'Regime MÉDIA: valor atual não disponível para verificação automática. '
+                    'Importe o contracheque do beneficiário na tela do processo ou informe o valor pago na folha.'
+                )
     elif dados and dados.criterio_reajuste and regra.criterio_reajuste:
         reaj_val = regra.criterio_reajuste.upper() in dados.criterio_reajuste.upper()
         reaj_obs = (f'Critério de reajuste informado: "{dados.criterio_reajuste}". '
@@ -706,19 +756,22 @@ def executar_pre_analise(processo, regra):
         diff = pago - concedido
         divergencia_valor = abs(diff)
 
-        # Verifica se a diferença é explicada pelo complemento de salário mínimo
-        # (benefício < salário mínimo → concedido no salário mínimo conforme art. 201 §2º CF/88)
+        # Verifica se a diferença é explicada pelo salário mínimo:
+        # (a) concessão no piso + folha ainda no mesmo piso, ou
+        # (b) concessão no piso + folha refletindo SM atualizado (reajuste correto)
+        from processos.models import ReajusteINSS as _RINSS_F
         sal_min_folha = _salario_minimo_vigente(processo.data_concessao)
+        sm_atual_folha_obj = _RINSS_F.objects.order_by('-ano').first()
+        sm_atual_folha = sm_atual_folha_obj.salario_minimo if sm_atual_folha_obj else None
         media_folha = dados.media_contribuicoes
-        complemento_folha = (
-            sal_min_folha is not None
-            and media_folha is not None
-            and Decimal(str(media_folha)) < sal_min_folha
-            and abs(concedido - sal_min_folha) <= Decimal('0.10')
-            and abs(pago - sal_min_folha) <= Decimal('0.10')
-        )
 
-        if complemento_folha:
+        concedido_no_piso = sal_min_folha is not None and abs(concedido - sal_min_folha) <= Decimal('1.00')
+        pago_no_piso_atual = sm_atual_folha is not None and abs(pago - sm_atual_folha) <= Decimal('1.00')
+        pago_no_piso_concessao = sal_min_folha is not None and abs(pago - sal_min_folha) <= Decimal('0.10')
+
+        beneficio_piso_conforme = concedido_no_piso and (pago_no_piso_concessao or pago_no_piso_atual)
+
+        if beneficio_piso_conforme:
             divergencia_tipo = 'SEM_DIVERGENCIA'
             folha_resultado = 'CONFORME'
             divergencia_valor = Decimal('0.00')

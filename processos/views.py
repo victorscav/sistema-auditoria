@@ -66,7 +66,7 @@ def lista_processos(request):
 
 
 def detalhe_processo(request, pk):
-    processo = get_object_or_404(Processo.objects.select_related('beneficiario', 'lote'), pk=pk)
+    processo = get_object_or_404(Processo.objects.select_related('beneficiario', 'lote', 'contracheque', 'dados_beneficio'), pk=pk)
     dados = getattr(processo, 'dados_beneficio', None)
     contracheque = getattr(processo, 'contracheque', None)
     regime = dados.regime_reajuste if dados else RegimeReajuste.NAO_DEFINIDO
