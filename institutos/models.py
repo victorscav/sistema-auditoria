@@ -3,7 +3,29 @@ from django.utils import timezone
 from processos.models import TipoBeneficio
 
 
+class EmpresaAuditora(models.Model):
+    nome = models.CharField(max_length=200, verbose_name='Nome')
+    sigla = models.CharField(max_length=20, blank=True, verbose_name='Sigla')
+    cnpj = models.CharField(max_length=18, blank=True, verbose_name='CNPJ')
+    logo = models.ImageField(upload_to='empresas/logos/', blank=True, null=True, verbose_name='Logo')
+    ativa = models.BooleanField(default=True, verbose_name='Ativa')
+
+    class Meta:
+        verbose_name = 'Empresa Auditora'
+        verbose_name_plural = 'Empresas Auditoras'
+        ordering = ['nome']
+
+    def __str__(self):
+        return self.sigla or self.nome
+
+
 class Instituto(models.Model):
+    empresa_auditora = models.ForeignKey(
+        EmpresaAuditora, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        verbose_name='Empresa Auditora',
+        related_name='institutos',
+    )
     nome = models.CharField(max_length=200, verbose_name='Nome')
     cnpj = models.CharField(max_length=18, blank=True, verbose_name='CNPJ')
     estado = models.CharField(max_length=2, verbose_name='Estado (UF)')
@@ -20,7 +42,47 @@ class Instituto(models.Model):
         verbose_name='Subsídio do Prefeito (R$)',
         help_text='Teto remuneratório dos servidores e pensionistas do RPPS (art. 37, XI CF/88). Exceção: procuradores municipais possuem teto próprio.',
     )
+
+    # ── Adicional por Tempo de Serviço (Triênio) ──────────────────────────
+    norma_trienio = models.CharField(
+        max_length=300, blank=True,
+        verbose_name='Base Legal do Triênio',
+        help_text='Ex: Art. 71 da Lei nº 05/1991',
+    )
+    trienio_primeiro_percentual = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        verbose_name='1º Triênio (%)',
+        help_text='Percentual do primeiro triênio. Calculado sobre o vencimento base.',
+    )
+    trienio_demais_percentual = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        verbose_name='Demais Triênios (%)',
+        help_text='Percentual de cada triênio a partir do 2º. Calculado sobre o vencimento base.',
+    )
+    trienio_limite_periodos = models.IntegerField(
+        null=True, blank=True,
+        verbose_name='Limite de Triênios',
+        help_text='Número máximo de triênios passíveis de acumulação.',
+    )
+
     observacoes = models.TextField(blank=True, verbose_name='Observações')
+
+    def percentual_trienio_para(self, n_trienios):
+        """
+        Retorna o percentual total de triênio para N períodos completos.
+        Fórmula (Art. 71 Lei 05/1991): 1º = trienio_primeiro_percentual,
+        demais = trienio_demais_percentual cada, limitado a trienio_limite_periodos.
+        """
+        if not n_trienios or not self.trienio_primeiro_percentual:
+            return None
+        from decimal import Decimal
+        limite = self.trienio_limite_periodos or 99
+        n = min(int(n_trienios), limite)
+        if n <= 0:
+            return Decimal('0')
+        primeiro = self.trienio_primeiro_percentual
+        demais = self.trienio_demais_percentual or Decimal('0')
+        return primeiro + demais * (n - 1)
 
     class Meta:
         verbose_name = 'Instituto RPPS'

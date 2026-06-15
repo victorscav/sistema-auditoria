@@ -1,0 +1,4 @@
+{% comment %}
+Include: exibe abreviação do tipo_beneficio para caber em colunas estreitas.
+Uso: {% include 'relatorios/_tipo_abrev.html' with tipo=p.tipo_beneficio %}
+{% endcomment %}{% if tipo == 'APOS_VOLUNTARIA' %}Apos. Voluntária (Integral){% elif tipo == 'APOS_VOLUNTARIA_PROP' %}Apos. Voluntária (Prop.){% elif tipo == 'APOS_VOLUNTARIA_POR_IDADE' %}Apos. Vol. por Idade{% elif tipo == 'APOS_VOLUNTARIA_PROP_IDADE' %}Apos. Vol. por Idade (Prop.){% elif tipo == 'APOS_VOLUNTARIA_IDADE_TC' %}Apos. Vol. Idade e TC{% elif tipo == 'APOS_INCAPACIDADE' %}Apos. Invalidez (Integral){% elif tipo == 'APOS_INVALIDEZ_PERMANENTE' %}Apos. Invalidez (Prop.){% elif tipo == 'APOS_COMPULSORIA' %}Apos. Compulsória{% elif tipo == 'APOS_ESPECIAL_MAGISTERIO' %}Apos. Esp. Magistério{% elif tipo == 'PENSAO_MORTE' %}Pensão por Morte{% elif tipo == 'REVISAO_REENQUADRAMENTO' %}Revisão/Reenquadramento{% else %}{{ tipo }}{% endif %}

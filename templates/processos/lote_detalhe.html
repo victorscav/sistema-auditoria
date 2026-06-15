@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ lote.numero }} — Lotes{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'processos:lotes' %}">Lotes</a></li>
+<li class="breadcrumb-item active">{{ lote.numero }}</li>
+{% endblock %}
+
+{% block content %}
+
+<!-- Cabeçalho do lote -->
+<div class="card card-stat mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h4 class="fw-bold mb-0">{{ lote.numero }}</h4>
+                {% if lote.descricao %}<p class="text-muted mb-2">{{ lote.descricao }}</p>{% endif %}
+                <span class="badge {% if lote.status == 'ABERTO' %}bg-success{% elif lote.status == 'EM_ANDAMENTO' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                    {{ lote.get_status_display }}
+                </span>
+                <small class="text-muted ms-2">Criado em {{ lote.data_criacao|date:"d/m/Y" }}</small>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'processos:novo' %}?lote={{ lote.pk }}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>Novo Processo
+                </a>
+                <a href="{% url 'processos:editar_lote' lote.pk %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-pencil me-1"></i>Editar Lote
+                </a>
+            </div>
+        </div>
+
+        <!-- Progresso -->
+        <div class="mt-3" style="max-width: 400px;">
+            <div class="d-flex justify-content-between mb-1">
+                <small class="text-muted">{{ lote.processos_concluidos }} de {{ lote.total_processos }} processos concluídos</small>
+                <small class="fw-semibold">{{ lote.percentual_conclusao }}%</small>
+            </div>
+            <div class="progress" style="height: 8px;">
+                <div class="progress-bar {% if lote.percentual_conclusao == 100 %}bg-success{% endif %}"
+                     style="width: {{ lote.percentual_conclusao }}%"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabela de processos -->
+<div class="card card-stat">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3">Processo</th>
+                        <th>Beneficiário</th>
+                        <th>CPF</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Resultado</th>
+                        <th class="text-end pe-3">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for processo in processos %}
+                    <tr style="cursor:pointer" onclick="location.href='{% url 'processos:detalhe' processo.pk %}'">
+                        <td class="ps-3 fw-semibold">{{ processo.numero }}</td>
+                        <td>{{ processo.beneficiario.nome|upper }}</td>
+                        <td><small class="text-muted">{{ processo.beneficiario.cpf }}</small></td>
+                        <td><small>{{ processo.get_tipo_beneficio_display }}</small></td>
+                        <td>
+                            <span class="badge badge-{{ processo.status_processo|lower }}">
+                                {{ processo.get_status_processo_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% with resultado=processo.get_resultado_analise resultado_label=processo.get_resultado_analise_display %}
+                            {% if resultado %}
+                                <span class="badge badge-{{ resultado|lower }}">{{ resultado_label }}</span>
+                            {% else %}
+                                <span class="text-muted small">—</span>
+                            {% endif %}
+                            {% endwith %}
+                        </td>
+                        <td class="text-end pe-3" onclick="event.stopPropagation()">
+                            <a href="{% url 'processos:detalhe' processo.pk %}" class="btn btn-sm btn-outline-primary py-0">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="{% url 'analise:analise' processo.pk %}" class="btn btn-sm btn-outline-secondary py-0">
+                                <i class="bi bi-clipboard-check"></i>
+                            </a>
+                            <form method="post" action="{% url 'processos:excluir' processo.pk %}" class="d-inline"
+                                  onsubmit="return confirm('Excluir o processo {{ processo.numero }}?')">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            Nenhum processo neste lote.
+                            <div class="mt-2">
+                                <a href="{% url 'processos:novo' %}?lote={{ lote.pk }}" class="btn btn-primary btn-sm">
+                                    <i class="bi bi-plus-lg me-1"></i>Adicionar Processo
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

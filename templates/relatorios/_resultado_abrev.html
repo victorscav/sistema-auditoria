@@ -1,0 +1,4 @@
+{% comment %}
+Exibe resultado abreviado com inline style para garantir renderização uniforme no xhtml2pdf.
+Uso: {% include 'relatorios/_resultado_abrev.html' with resultado=valor %}
+{% endcomment %}{% if resultado == 'CONFORME' %}<span style="color:#276749;font-weight:bold;font-size:7pt">Conforme</span>{% elif resultado == 'NAO_CONFORME' %}<span style="color:#9B2C2C;font-weight:bold;font-size:7pt">Não Conf.</span>{% elif resultado == 'RESSALVAS' or resultado == 'CONFORME_RESSALVAS' %}<span style="color:#744210;font-weight:bold;font-size:7pt">Ressalvas</span>{% elif resultado == 'INDETERMINADO' %}<span style="color:#718096;font-size:7pt">Indeterm.</span>{% else %}<span style="color:#718096;font-size:7pt">Pendente</span>{% endif %}

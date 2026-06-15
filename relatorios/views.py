@@ -1,4 +1,5 @@
 import io
+import base64
 from datetime import date
 from django.shortcuts import render
 from django.http import HttpResponse
@@ -7,7 +8,29 @@ from django.template.loader import render_to_string
 from processos.models import Processo, Lote, TipoBeneficio
 from analise.models import ConferenciaFolha, ResultadoAnalise, AchadoAuditoria
 from analise.utils import recalcular_conferencia
-from institutos.models import RegraAposentadoria
+from institutos.models import RegraAposentadoria, EmpresaAuditora
+
+
+def _logo_base64(empresa):
+    """Retorna data URI do logo da empresa, ou None se não houver."""
+    if not empresa or not empresa.logo:
+        return None
+    try:
+        with open(empresa.logo.path, 'rb') as f:
+            data = base64.b64encode(f.read()).decode('ascii')
+        ext = empresa.logo.name.rsplit('.', 1)[-1].lower()
+        mime = 'image/png' if ext == 'png' else 'image/jpeg'
+        return f'data:{mime};base64,{data}'
+    except Exception:
+        return None
+
+
+def _get_empresa(request):
+    """Resolve a empresa auditora a partir do POST ou do único registro ativo."""
+    eid = request.POST.get('empresa_auditora') or request.GET.get('empresa_auditora')
+    if eid:
+        return EmpresaAuditora.objects.filter(pk=eid, ativa=True).first()
+    return EmpresaAuditora.objects.filter(ativa=True).first()
 
 
 def _fundamentacao_combinada(achado):
@@ -42,10 +65,10 @@ def _fundamentacao_combinada(achado):
 
 def _render_pdf(template_name, context):
     """Renderiza template HTML como PDF e retorna bytes."""
-    from xhtml2pdf import pisa
+    from weasyprint import HTML
     html = render_to_string(template_name, context)
     buf = io.BytesIO()
-    pisa.CreatePDF(io.StringIO(html), dest=buf)
+    HTML(string=html).write_pdf(buf)
     return buf.getvalue()
 
 
@@ -80,8 +103,18 @@ def _instituto_nome(processos_qs):
     return ''
 
 
+_RESULTADO_LABELS = {
+    'CONFORME':     'Conforme',
+    'RESSALVAS':    'Conforme com Ressalvas',
+    'NAO_CONFORME': 'Não Conforme',
+    'INDETERMINADO':'Indeterminado',
+}
+
 def _resultado(p):
-    return p.get_resultado_analise() or 'Pendente'
+    return p.get_resultado_analise() or 'PENDENTE'
+
+def _resultado_display(p):
+    return _RESULTADO_LABELS.get(p.get_resultado_analise(), 'Pendente')
 
 
 def _stats(processos):
@@ -115,6 +148,7 @@ def index(request):
 
     return render(request, 'relatorios/index.html', {
         'lotes': Lote.objects.all(),
+        'empresas': EmpresaAuditora.objects.filter(ativa=True),
         'stats': stats,
     })
 
@@ -133,6 +167,7 @@ def relatorio_analitico(request):
         recalcular_conferencia(p)
     total, n_c, n_r, n_nc, n_p, perc = _stats(processos)
 
+    empresa = _get_empresa(request)
     ctx = {
         'processos': processos,
         'lote_label': _lote_label(lote_id),
@@ -142,6 +177,8 @@ def relatorio_analitico(request):
         'n_nao_conformes': n_nc,
         'n_pendentes': n_p,
         'instituto_nome': _instituto_nome(qs),
+        'empresa_auditora': empresa,
+        'logo_base64': _logo_base64(empresa),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_analitico.html', ctx), 'planilha_analitica.pdf')
 
@@ -172,12 +209,15 @@ def relatorio_divergencias(request):
     )
 
     inst_qs = Processo.objects.filter(lote_id=lote_id) if lote_id else Processo.objects.all()
+    empresa = _get_empresa(request)
     ctx = {
         'divergencias': divergencias,
         'total_impacto': round(total_impacto, 2),
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
         'instituto_nome': _instituto_nome(inst_qs),
+        'empresa_auditora': empresa,
+        'logo_base64': _logo_base64(empresa),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_divergencias.html', ctx), 'divergencias_financeiras.pdf')
 
@@ -223,6 +263,7 @@ def relatorio_indicadores(request):
                 'perc': round(c / t * 100, 1),
             })
 
+    empresa = _get_empresa(request)
     ctx = {
         'total': total, 'n_conformes': n_c, 'n_ressalvas': n_r,
         'n_nao_conformes': n_nc, 'n_pendentes': n_p, 'perc_conformidade': perc,
@@ -230,6 +271,8 @@ def relatorio_indicadores(request):
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
         'instituto_nome': _instituto_nome(qs),
+        'empresa_auditora': empresa,
+        'logo_base64': _logo_base64(empresa),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_indicadores.html', ctx), 'indicadores_conformidade.pdf')
 
@@ -255,16 +298,21 @@ def relatorio_folha_inativos(request):
             'folha': folha,
             'dados': dados,
             'divergencia_valor': round(float(div), 2) if div is not None else None,
-            'tem_divergencia': div and abs(float(div)) > 0.01,
+            'tem_divergencia': bool(folha and folha.tipo_divergencia != 'SEM_DIVERGENCIA'),
             'resultado': _resultado(p),
+            'resultado_display': _resultado_display(p),
             'recomendacoes': recomendacoes,
         })
 
+    empresa = _get_empresa(request)
     ctx = {
         'processos': rows,
+        'has_recomendacoes': any(r['recomendacoes'] for r in rows),
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
         'instituto_nome': _instituto_nome(qs),
+        'empresa_auditora': empresa,
+        'logo_base64': _logo_base64(empresa),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_folha_inativos.html', ctx), 'conferencia_folha_inativos.pdf')
 
@@ -284,11 +332,14 @@ def relatorio_recomendacoes(request):
         a.fundamentacao_combinada = _fundamentacao_combinada(a)
 
     inst_qs = Processo.objects.filter(lote_id=lote_id) if lote_id else Processo.objects.all()
+    empresa = _get_empresa(request)
     ctx = {
         'achados': achados,
         'lote_label': _lote_label(lote_id),
         'data_geracao': date.today().strftime('%d/%m/%Y'),
         'instituto_nome': _instituto_nome(inst_qs),
+        'empresa_auditora': empresa,
+        'logo_base64': _logo_base64(empresa),
     }
     return _pdf_response(_render_pdf('relatorios/pdf_recomendacoes.html', ctx), 'recomendacoes_tecnicas.pdf')
 
@@ -327,6 +378,7 @@ def relatorio_final_lote(request):
             'folha': getattr(p, 'conferenciafolha', None),
             'dados': getattr(p, 'dados_beneficio', None),
             'resultado': _resultado(p),
+            'resultado_display': _resultado_display(p),
         })
 
     divergencias = [
@@ -348,6 +400,7 @@ def relatorio_final_lote(request):
 
     lote_label = lote.numero if lote else 'Todos os lotes'
 
+    empresa = _get_empresa(request)
     ctx = {
         'lote': lote,
         'lote_label': lote_label,
@@ -365,6 +418,8 @@ def relatorio_final_lote(request):
         'divergencias': divergencias,
         'achados': list(achados),
         'instituto_nome': _instituto_nome(qs),
+        'empresa_auditora': empresa,
+        'logo_base64': _logo_base64(empresa),
     }
     fname = f"relatorio_final_{lote_label.replace('/', '-')}.pdf"
     return _pdf_response(_render_pdf('relatorios/pdf_final_lote.html', ctx), fname)

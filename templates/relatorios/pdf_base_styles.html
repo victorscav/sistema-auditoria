@@ -1,79 +1,166 @@
 <style>
-    @page {
-        size: A4 landscape;
-        margin: 1.5cm 1cm 1.5cm 1cm;
-        @frame footer {
-            -pdf-frame-content: footer_content;
-            bottom: 0.5cm; height: 0.8cm;
-        }
-    }
-    @page portrait {
-        size: A4 portrait;
-        margin: 2cm 1.5cm 2cm 1.5cm;
-        @frame footer {
-            -pdf-frame-content: footer_content;
-            bottom: 0.5cm; height: 0.8cm;
-        }
-    }
-    body { font-family: Helvetica, Arial, sans-serif; font-size: 8pt; color: #222; }
-    .portrait { -pdf-page-size: portrait; }
+/* ──────────────────────────────────────────────────────────────────────────
+   ESTILOS BASE — Relatórios de Auditoria RPPS
+   Paleta: #4A5568 (dark) · #2C7A7B (teal) · #EDF2F7 (gray) · #E6FFFA (green)
+   ────────────────────────────────────────────────────────────────────────── */
 
-    /* Header */
-    .pdf-header { margin-bottom: 10pt; border-bottom: 2pt solid #1A3A5C; padding-bottom: 5pt; }
-    .pdf-header h1 { font-size: 13pt; color: #1A3A5C; margin: 0 0 2pt 0; }
-    .pdf-header .subtitle { font-size: 8pt; color: #555; }
-    .pdf-header .meta { font-size: 7.5pt; color: #555; float: right; text-align: right; }
+@page {
+    size: A4 landscape;
+    margin: 0 1cm 1.8cm 1cm;
+}
+@page portrait {
+    size: A4 portrait;
+    margin: 0 1.5cm 1.8cm 1.5cm;
+}
 
-    /* Section title */
-    .section-title {
-        background: #1A3A5C; color: #fff;
-        font-size: 9pt; font-weight: bold;
-        padding: 3pt 6pt; margin: 8pt 0 4pt 0;
-    }
-    .section-sub {
-        background: #D6EAF8; color: #1A3A5C;
-        font-size: 8.5pt; font-weight: bold;
-        padding: 2pt 6pt; margin: 6pt 0 3pt 0;
-    }
+.page-num::after   { content: counter(page); }
+.page-count::after { content: counter(pages); }
 
-    /* Tables */
-    table { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
-    th {
-        background: #1A3A5C; color: #fff;
-        font-size: 7pt; font-weight: bold;
-        padding: 3pt 4pt; text-align: left;
-        border: 0.5pt solid #0d2340;
-    }
-    td {
-        font-size: 7pt; padding: 2.5pt 4pt;
-        border: 0.5pt solid #ccc;
-        vertical-align: top;
-    }
-    tr.even td { background: #F0F4F8; }
-    tr.total td { background: #1A3A5C; color: #fff; font-weight: bold; }
-    td.ok { color: #155724; }
-    td.nok { color: #721c24; }
-    td.warn { color: #856404; }
+body { font-family: Helvetica, Arial, sans-serif; font-size: 8.5pt; color: #222; margin: 0; padding: 0; }
 
-    /* Summary boxes */
-    .summary-box {
-        border: 1pt solid #ccc; padding: 5pt 8pt; margin: 4pt 0;
-        background: #F8F9FA;
-    }
-    .summary-box .label { font-size: 7pt; color: #555; }
-    .summary-box .value { font-size: 13pt; font-weight: bold; color: #1A3A5C; }
+/* full-width helpers */
+.fw-ls { margin-left: -1cm;   margin-right: -1cm; }
+.fw-pt { margin-left: -1.5cm; margin-right: -1.5cm; }
 
-    /* Badges */
-    .badge-conforme { color: #155724; font-weight: bold; }
-    .badge-nao_conforme { color: #721c24; font-weight: bold; }
-    .badge-ressalvas { color: #856404; font-weight: bold; }
-    .badge-indeterminado { color: #555; }
-    .badge-pendente { color: #555; }
+/* ══════════════════════════════════════════════════════════════════════════
+   CABEÇALHO — banda full-width escura
+   ══════════════════════════════════════════════════════════════════════════ */
+.pdf-header {
+    background: #4A5568;
+    color: white;
+    padding: 9pt 1cm 7pt 1cm;
+    margin: 0 -1cm;
+}
+.pdf-header table  { width: 100%; border-collapse: collapse; border: none; }
+.pdf-header td     { border: none; padding: 0; background: transparent; vertical-align: bottom; }
+.hdr-logo img      { max-height: 26pt; max-width: 80pt; display: block; }
+.hdr-company       { font-size: 10pt; font-weight: bold; color: #fff; letter-spacing: 0.5pt; }
+.hdr-subtitle      { font-size: 7.5pt; color: rgba(255,255,255,0.82); margin-top: 2pt; }
+.hdr-pag           { font-size: 7.5pt; color: rgba(255,255,255,0.82); text-align: right; vertical-align: top !important; }
 
-    /* Footer */
-    #footer_content { font-size: 6.5pt; color: #888; text-align: center; border-top: 0.5pt solid #ccc; padding-top: 2pt; }
+/* Linha teal accent */
+.accent-line    { background: #2C7A7B; height: 4pt; margin: 0 -1cm; }
+.accent-line-pt { background: #2C7A7B; height: 4pt; margin: 0 -1.5cm; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BLOCO DE TÍTULO (separado do cabeçalho)
+   ══════════════════════════════════════════════════════════════════════════ */
+.title-block {
+    background: #4A5568;
+    color: white;
+    padding: 7pt 10pt 6pt 10pt;
+    margin-top: 7pt;
+}
+.doc-title { font-size: 13pt; font-weight: bold; margin: 0; letter-spacing: 0.3pt; }
+.doc-sub   { font-size: 8pt; color: rgba(255,255,255,0.88); margin: 3pt 0 0 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CABEÇALHOS DE SEÇÃO E SUBSEÇÃO
+   ══════════════════════════════════════════════════════════════════════════ */
+.section-title {
+    background: #4A5568; color: #fff;
+    font-size: 9pt; font-weight: bold;
+    padding: 4pt 10pt; margin: 10pt 0 3pt 0;
+    page-break-after: avoid;
+}
+.section-sub {
+    background: #EDF2F7; color: #4A5568;
+    font-size: 8pt; font-weight: bold;
+    padding: 3pt 8pt; margin: 6pt 0 2pt 0;
+    page-break-after: avoid;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TABELAS
+   ══════════════════════════════════════════════════════════════════════════ */
+table { width: 100%; border-collapse: collapse; margin-bottom: 5pt; }
+th {
+    background: #4A5568; color: #fff;
+    font-size: 7.5pt; font-weight: bold;
+    padding: 3pt 5pt; text-align: left;
+    border: none;
+}
+td {
+    font-size: 7.5pt; padding: 3pt 5pt;
+    border-bottom: 0.5pt solid #E2E8F0;
+    vertical-align: top;
+}
+tr.even td { background: #EDF2F7; }
+tr.odd  td { background: #ffffff; }
+tr.total td { background: #4A5568; color: #fff; font-weight: bold; border: none; }
+
+/* células de status */
+td.ok   { color: #276749; font-weight: bold; }
+td.nok  { color: #9B2C2C; font-weight: bold; }
+td.warn { color: #744210; font-weight: bold; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TABELA TIPO META-TABLE (label | valor, alternância cinza)
+   ══════════════════════════════════════════════════════════════════════════ */
+.meta-table { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
+.meta-table td { font-size: 8pt; padding: 5pt 8pt; border: none; vertical-align: top; }
+.meta-odd  td { background: #EDF2F7; }
+.meta-even td { background: #ffffff; }
+.ml { font-weight: bold; color: #4A5568; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CAIXAS DE RESUMO ESTATÍSTICO (stat-cell)
+   ══════════════════════════════════════════════════════════════════════════ */
+.stat-cell      { text-align: center; padding: 8pt 5pt; }
+.stat-cell .num { font-size: 18pt; font-weight: bold; }
+.stat-cell .lbl { font-size: 7pt; margin-top: 2pt; }
+.s-tot { background: #EDF2F7; } .s-tot .num { color: #4A5568; } .s-tot .lbl { color: #718096; }
+.s-ok  { background: #E6FFFA; } .s-ok  .num { color: #276749; } .s-ok  .lbl { color: #276749; }
+.s-wn  { background: #FFFAF0; } .s-wn  .num { color: #744210; } .s-wn  .lbl { color: #744210; }
+.s-nk  { background: #FFF5F5; } .s-nk  .num { color: #9B2C2C; } .s-nk  .lbl { color: #9B2C2C; }
+.s-nd  { background: #EDF2F7; } .s-nd  .num { color: #718096; } .s-nd  .lbl { color: #718096; }
+.s-tl  { background: #2C7A7B; } .s-tl  .num { color: #fff; }    .s-tl  .lbl { color: rgba(255,255,255,0.85); }
+
+/* caixas de stat no relatório final */
+.stat-box { text-align: center; padding: 6pt 4pt; display: block; }
+.stat-box .num  { font-size: 16pt; font-weight: bold; }
+.stat-box .lbl  { font-size: 6.5pt; margin-top: 1pt; }
+.stat-box.s-ok  { background: #E6FFFA; color: #276749; }
+.stat-box.s-wn  { background: #FFFAF0; color: #744210; }
+.stat-box.s-nk  { background: #FFF5F5; color: #9B2C2C; }
+.stat-box.s-nd  { background: #EDF2F7; color: #718096; }
+.stat-box.s-tl  { background: #2C7A7B; color: white; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ACHADOS / OBSERVAÇÕES
+   ══════════════════════════════════════════════════════════════════════════ */
+.achado-box {
+    background: #EDF2F7;
+    border-left: 3pt solid #4A5568;
+    padding: 7pt 10pt;
+    margin-bottom: 6pt;
+    font-size: 8pt;
+    line-height: 1.5;
+    page-break-inside: avoid;
+}
+.obs-box {
+    background: #F7FAFC;
+    border-left: 3pt solid #4A5568;
+    padding: 6pt 10pt;
+    font-size: 8pt;
+    line-height: 1.5;
+    margin: 4pt 0;
+    page-break-inside: avoid;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BADGES E STATUS
+   ══════════════════════════════════════════════════════════════════════════ */
+.badge-conforme                              { color: #276749; font-weight: bold; }
+.badge-nao_conforme                          { color: #9B2C2C; font-weight: bold; }
+.badge-ressalvas, .badge-conforme_ressalvas  { color: #744210; font-weight: bold; }
+.badge-indeterminado                         { color: #718096; }
+.badge-pendente                              { color: #718096; }
+.status-ok                                   { color: #276749; font-weight: bold; }
+.status-nok                                  { color: #9B2C2C; font-weight: bold; }
+
+/* Evita quebra de página APENAS em cabeçalhos de seção e caixas — linhas de tabela paginam normalmente */
+.section-title, .section-sub { page-break-after: avoid; page-break-inside: avoid; }
+.achado-box, .obs-box, .title-block { page-break-inside: avoid; }
+
 </style>
-
-<div id="footer_content">
-    Auditoria RPPS — {{ instituto_nome|default:"" }} · Documento gerado em {{ data_geracao }} · Página <pdf:pagenumber> de <pdf:pagecount>
-</div>

@@ -854,6 +854,103 @@
             {% endif %}
         {% endif %}
 
+        {# ── Análise do triênio via demonstrativo (PARIDADE) ────────────── #}
+        {% if analise_trienio %}
+        <div class="card border-{% if analise_trienio.tem_divergencia %}warning{% else %}success{% endif %} mt-2">
+        <div class="card-body py-3">
+            <h6 class="fw-semibold mb-3">
+                <i class="bi bi-calculator me-2 text-{% if analise_trienio.tem_divergencia %}warning{% else %}success{% endif %}"></i>
+                Análise do Triênio — Demonstrativo de Pagamento
+                {% if analise_trienio.tem_divergencia %}
+                <span class="badge bg-warning text-dark ms-2">Pagamento a maior detectado</span>
+                {% else %}
+                <span class="badge bg-success ms-2">Triênio conforme</span>
+                {% endif %}
+            </h6>
+            <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2" style="font-size:0.87rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Item</th>
+                        <th class="text-end">Valor no demonstrativo</th>
+                        <th class="text-end">Valor correto</th>
+                        <th class="text-end">Diferença</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Vencimento base</td>
+                        <td class="text-end">R$ {{ analise_trienio.vencimento_base }}</td>
+                        <td class="text-end">R$ {{ analise_trienio.vencimento_base }}</td>
+                        <td class="text-end text-muted">—</td>
+                    </tr>
+                    <tr class="{% if analise_trienio.tem_divergencia %}table-warning{% endif %}">
+                        <td>
+                            Triênio ({{ analise_trienio.trienio_percentual }}%)
+                            {% if analise_trienio.tem_divergencia %}
+                            <span class="badge bg-danger ms-1" style="font-size:0.7rem;">Calculado incorretamente</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end {% if analise_trienio.tem_divergencia %}text-danger fw-bold{% endif %}">
+                            R$ {{ analise_trienio.trienio_pago }}
+                        </td>
+                        <td class="text-end text-success fw-bold">R$ {{ analise_trienio.trienio_correto }}</td>
+                        <td class="text-end {% if analise_trienio.tem_divergencia %}text-danger fw-bold{% endif %}">
+                            {% if analise_trienio.tem_divergencia %}+ R$ {{ analise_trienio.diferenca_trienio }}{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    <tr class="table-secondary fw-bold">
+                        <td>Total de vencimentos</td>
+                        <td class="text-end {% if analise_trienio.tem_divergencia %}text-danger{% endif %}">
+                            R$ {{ analise_trienio.total_vencimentos }}
+                        </td>
+                        <td class="text-end text-success">R$ {{ analise_trienio.valor_esperado_correto }}</td>
+                        <td class="text-end {% if analise_trienio.tem_divergencia %}text-danger{% endif %}">
+                            {% if analise_trienio.tem_divergencia %}+ R$ {{ analise_trienio.pagamento_maior }}{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            </div>
+            {% if analise_trienio.tem_divergencia %}
+            <div class="alert alert-warning py-2 mb-0 small">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                O triênio de <strong>{{ analise_trienio.trienio_percentual }}%</strong> foi calculado sobre
+                <strong>R$ {{ analise_trienio.trienio_pago|floatformat:2 }}</strong>
+                (base + FG incorporada), resultando em R$ {{ analise_trienio.trienio_pago }}.
+                O correto, conforme
+                {% if processo.instituto and processo.instituto.norma_trienio %}
+                    {{ processo.instituto.norma_trienio }},
+                {% else %}
+                    a legislação vigente,
+                {% endif %}
+                é calcular somente sobre o vencimento base
+                ({{ analise_trienio.trienio_percentual }}% × R$ {{ analise_trienio.vencimento_base }} = R$ {{ analise_trienio.trienio_correto }}).
+                <strong>Pagamento a maior: R$ {{ analise_trienio.pagamento_maior }} por mês.</strong>
+            </div>
+            {% endif %}
+        </div>
+        </div>
+        {% elif regime_paridade and contracheque and contracheque.ultima_remuneracao_cargo %}
+        <div class="alert alert-info py-2 small mt-2">
+            <strong><i class="bi bi-calculator me-1"></i>Composição do Valor Esperado (Paridade):</strong>
+            Rem. paradigma (sem triênio): <strong>R$ {{ contracheque.ultima_remuneracao_cargo }}</strong>
+            {% if contracheque.valor_trienio_calculado %}
+            + Triênio ({{ contracheque.percentual_trienio }}% × R$ {{ contracheque.vencimento_base_paradigma }})
+            = <strong>R$ {{ contracheque.valor_trienio_calculado }}</strong>
+            → <strong class="text-primary">Total esperado: R$ {{ valor_esperado }}</strong>
+            {% endif %}
+            {% if processo.instituto and processo.instituto.norma_trienio %}
+            <br><i class="bi bi-book me-1 text-muted"></i>
+            <span class="text-muted">Base legal: {{ processo.instituto.norma_trienio }}
+            — 1º triênio {{ processo.instituto.trienio_primeiro_percentual }}%,
+            demais {{ processo.instituto.trienio_demais_percentual }}% cada,
+            limite {{ processo.instituto.trienio_limite_periodos }} triênios,
+            base: vencimento base.</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {# ── Comparativo: esperado × pago ─────────────────────────────── #}
         <div class="row g-3 mt-1">
             <div class="col-md-4">
@@ -879,20 +976,177 @@
                 </div>
             </div>
             <div class="col-md-4">
+                {% if folha.tipo_divergencia == 'COM_DIVERGENCIAS' %}
+                {# Divergências mistas: mostra cada total por separado, sem acumular #}
+                <div class="border border-warning rounded p-3">
+                    <div class="text-muted small mb-2 text-center">Divergências detectadas</div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small fw-semibold text-warning">
+                            <i class="bi bi-arrow-up-circle me-1"></i>A maior:
+                        </span>
+                        <span class="fw-bold text-warning">R$ {{ total_divergencia_maior }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="small fw-semibold text-danger">
+                            <i class="bi bi-arrow-down-circle me-1"></i>A menor:
+                        </span>
+                        <span class="fw-bold text-danger">R$ {{ total_divergencia_menor }}</span>
+                    </div>
+                    <div class="text-muted" style="font-size:0.75rem; margin-top:0.4rem;">
+                        Divergências independentes — ver tabela abaixo
+                    </div>
+                </div>
+                {% else %}
                 <div class="border rounded p-3 text-center
-                    {% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}border-success{% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}border-warning{% else %}border-danger{% endif %}">
-                    <div class="text-muted small mb-1">Divergência</div>
+                    {% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}border-success
+                    {% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}border-warning
+                    {% else %}border-danger{% endif %}">
+                    <div class="text-muted small mb-1">Resultado</div>
                     {% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}
                         <div class="fs-5 fw-bold text-success"><i class="bi bi-check-circle me-1"></i>Sem divergência</div>
                     {% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}
-                        <div class="fs-5 fw-bold text-warning">+ R$ {{ folha.impacto_financeiro_estimado }}</div>
-                        <small class="text-warning">Pagamento maior que o esperado</small>
+                        <div class="fs-5 fw-bold text-warning"><i class="bi bi-exclamation-triangle me-1"></i>+ R$ {{ folha.impacto_financeiro_estimado }}</div>
+                        <small class="text-warning fw-semibold">Pagamento a maior</small>
                     {% elif folha.tipo_divergencia == 'PAGAMENTO_MENOR' %}
                         <div class="fs-5 fw-bold text-danger">- R$ {{ folha.impacto_financeiro_estimado }}</div>
-                        <small class="text-danger">Pagamento menor que o esperado</small>
+                        <small class="text-danger fw-semibold">Pagamento a menor</small>
                     {% else %}
                         <div class="text-muted">—</div>
                     {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Tabela de divergências separadas ─────────────────────────────── #}
+        {% if divergencias_folha %}
+        <div class="mt-3">
+            <h6 class="fw-semibold mb-2">
+                <i class="bi bi-list-ul me-1"></i>Divergências identificadas
+            </h6>
+            <table class="table table-sm table-bordered" style="font-size:0.87rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Descrição</th>
+                        <th>Base Legal</th>
+                        <th class="text-end">Valor (R$)</th>
+                        <th class="text-center">Impacto</th>
+                        <th class="text-center">Origem</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for div in divergencias_folha %}
+                    <tr class="{% if div.impacto == 'MAIOR' %}table-warning{% else %}table-danger{% endif %}">
+                        <td class="fw-semibold">{{ div.get_tipo_display }}</td>
+                        <td>{{ div.descricao|default:"—" }}</td>
+                        <td class="text-muted small">{{ div.base_legal|default:"—" }}</td>
+                        <td class="text-end fw-bold">{{ div.valor }}</td>
+                        <td class="text-center">
+                            {% if div.impacto == 'MAIOR' %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-arrow-up"></i> A maior
+                                </span>
+                            {% else %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-arrow-down"></i> A menor
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if div.detectado_automaticamente %}
+                                <span class="badge bg-secondary" title="Detectado automaticamente pelo sistema">Auto</span>
+                            {% else %}
+                                <span class="badge bg-primary" title="Registrado manualmente pelo auditor">Manual</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if not div.detectado_automaticamente %}
+                            <form method="post" action="{% url 'analise:excluir_divergencia' div.pk %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-link btn-sm p-0 text-danger" title="Remover">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+                {% if total_divergencia_maior or total_divergencia_menor %}
+                <tfoot class="table-secondary fw-bold">
+                    {% if total_divergencia_maior %}
+                    <tr>
+                        <td colspan="3" class="text-end small">Total a maior:</td>
+                        <td class="text-end text-warning">R$ {{ total_divergencia_maior }}</td>
+                        <td colspan="3"></td>
+                    </tr>
+                    {% endif %}
+                    {% if total_divergencia_menor %}
+                    <tr>
+                        <td colspan="3" class="text-end small">Total a menor:</td>
+                        <td class="text-end text-danger">R$ {{ total_divergencia_menor }}</td>
+                        <td colspan="3"></td>
+                    </tr>
+                    {% endif %}
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+        {% endif %}
+
+        {# ── Adicionar divergência manual ─────────────────────────────────── #}
+        {% if folha %}
+        <div class="mt-2">
+            <button class="btn btn-outline-secondary btn-sm" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#formDivergencia">
+                <i class="bi bi-plus-circle me-1"></i>Registrar divergência manual
+            </button>
+            <div class="collapse mt-2" id="formDivergencia">
+                <div class="card border-secondary">
+                <div class="card-body py-3">
+                <form method="post" action="{% url 'analise:adicionar_divergencia' processo.pk %}">
+                    {% csrf_token %}
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold small">Tipo</label>
+                            <select name="tipo" class="form-select form-select-sm">
+                                <option value="REAJUSTE_MENOR">Reajuste aplicado a menor</option>
+                                <option value="REAJUSTE_MAIOR">Reajuste aplicado a maior</option>
+                                <option value="RUBRICA_INDEVIDA">Rubrica indevida</option>
+                                <option value="OUTRO_MAIOR">Pagamento a maior (outro)</option>
+                                <option value="OUTRO_MENOR">Pagamento a menor (outro)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Impacto</label>
+                            <select name="impacto" class="form-select form-select-sm">
+                                <option value="MAIOR">A maior</option>
+                                <option value="MENOR">A menor</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Valor (R$)</label>
+                            <input type="text" name="valor" class="form-control form-control-sm" placeholder="0,00" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold small">Descrição</label>
+                            <input type="text" name="descricao" class="form-control form-control-sm" placeholder="Descreva a divergência">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Base Legal</label>
+                            <input type="text" name="base_legal" class="form-control form-control-sm" placeholder="Ex: Lei nº 05/1991">
+                        </div>
+                        <div class="col-auto mt-2">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="bi bi-check-lg me-1"></i>Registrar
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                </div>
                 </div>
             </div>
         </div>
@@ -947,9 +1201,29 @@
                     <h6 class="fw-semibold mb-0 text-primary">
                         <i class="bi bi-robot me-1"></i>Análise Técnica (gerada automaticamente)
                     </h6>
-                    <a href="{% url 'analise:nota_tecnica_pdf' processo.pk %}" class="btn btn-danger btn-sm" target="_blank">
-                        <i class="bi bi-file-earmark-pdf me-1"></i>Gerar PDF
-                    </a>
+                    <div class="d-flex gap-2 align-items-center">
+                        {% if empresas %}
+                        <select name="empresa_auditora" id="sel-empresa-nt" class="form-select form-select-sm" style="min-width:160px">
+                            {% for ea in empresas %}
+                            <option value="{{ ea.pk }}">{{ ea }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endif %}
+                        <a id="btn-gerar-nt" href="{% url 'analise:nota_tecnica_pdf' processo.pk %}" class="btn btn-danger btn-sm" target="_blank">
+                            <i class="bi bi-file-earmark-pdf me-1"></i>Gerar PDF
+                        </a>
+                    </div>
+                    <script>
+                    (function(){
+                        var sel = document.getElementById('sel-empresa-nt');
+                        var btn = document.getElementById('btn-gerar-nt');
+                        if(sel && btn){
+                            var base = btn.href.split('?')[0];
+                            function upd(){ btn.href = base + '?empresa_auditora=' + sel.value; }
+                            sel.addEventListener('change', upd); upd();
+                        }
+                    })();
+                    </script>
                 </div>
                 {% if analise_automatica %}
                 <div style="font-size:0.88rem; line-height:1.7; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:1rem;">
@@ -1006,6 +1280,33 @@
 <!-- Achados -->
 {% elif aba_ativa == 'achados' %}
 <div class="row g-3">
+
+    {# ── Botão gerar achados das divergências ─────────────────────────────── #}
+    {% with pendentes=divergencias_folha|length %}
+    {% if divergencias_folha %}
+    <div class="col-12">
+        <div class="alert alert-info d-flex align-items-center justify-content-between py-2 mb-0">
+            <span>
+                <i class="bi bi-magic me-2"></i>
+                {% with n_pend=0 %}
+                Existem divergências de folha detectadas.
+                {% for d in divergencias_folha %}{% if not d.achado_gerado %}<strong>{{ forloop.counter }}</strong>{% endif %}{% endfor %}
+                {% endwith %}
+                {% for d in divergencias_folha %}{% if not d.achado_gerado %}
+                    Divergência "<strong>{{ d.get_tipo_display }}</strong>" (R$ {{ d.valor }}) ainda não convertida em achado.
+                {% endif %}{% endfor %}
+            </span>
+            <form method="post" action="{% url 'analise:gerar_achados_automaticos' processo.pk %}" class="ms-3 flex-shrink-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-magic me-1"></i>Gerar achados automaticamente
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+
     <div class="col-md-5">
         <div class="card card-stat">
             <div class="card-body">

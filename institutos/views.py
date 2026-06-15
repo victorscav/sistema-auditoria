@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
 
-from .models import Instituto, RegraAposentadoria, LeiMunicipalReajuste
+from .models import Instituto, RegraAposentadoria, LeiMunicipalReajuste, EmpresaAuditora
 from processos.models import TipoBeneficio
 
 
@@ -248,6 +248,57 @@ def excluir_lei(request, pk):
     lei.delete()
     messages.success(request, 'Lei excluída.')
     return redirect('institutos:detalhe', pk=instituto_pk)
+
+
+def lista_empresas(request):
+    empresas = EmpresaAuditora.objects.all()
+    return render(request, 'institutos/empresas.html', {'empresas': empresas})
+
+
+def nova_empresa(request):
+    if request.method == 'POST':
+        nome  = request.POST.get('nome', '').strip()
+        sigla = request.POST.get('sigla', '').strip()
+        cnpj  = request.POST.get('cnpj', '').strip()
+        ativa = request.POST.get('ativa') == 'on'
+        empresa = EmpresaAuditora(nome=nome, sigla=sigla, cnpj=cnpj, ativa=ativa)
+        if 'logo' in request.FILES:
+            empresa.logo = request.FILES['logo']
+        empresa.save()
+        messages.success(request, f'Empresa "{empresa}" cadastrada.')
+        return redirect('institutos:empresas')
+    return render(request, 'institutos/empresa_form.html', {})
+
+
+def editar_empresa(request, pk):
+    empresa = get_object_or_404(EmpresaAuditora, pk=pk)
+    if request.method == 'POST':
+        empresa.nome  = request.POST.get('nome', '').strip()
+        empresa.sigla = request.POST.get('sigla', '').strip()
+        empresa.cnpj  = request.POST.get('cnpj', '').strip()
+        empresa.ativa = request.POST.get('ativa') == 'on'
+        if 'logo' in request.FILES:
+            if empresa.logo:
+                empresa.logo.delete(save=False)
+            empresa.logo = request.FILES['logo']
+        elif request.POST.get('remover_logo') == '1' and empresa.logo:
+            empresa.logo.delete(save=False)
+            empresa.logo = None
+        empresa.save()
+        messages.success(request, f'Empresa "{empresa}" atualizada.')
+        return redirect('institutos:empresas')
+    return render(request, 'institutos/empresa_form.html', {'empresa': empresa})
+
+
+def excluir_empresa(request, pk):
+    empresa = get_object_or_404(EmpresaAuditora, pk=pk)
+    if request.method == 'POST':
+        nome = str(empresa)
+        if empresa.logo:
+            empresa.logo.delete(save=False)
+        empresa.delete()
+        messages.success(request, f'Empresa "{nome}" excluída.')
+    return redirect('institutos:empresas')
 
 
 _TIPOS_EQUIVALENTES = {

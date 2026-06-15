@@ -2,72 +2,58 @@
 <html>
 <head><meta charset="UTF-8">{% include 'relatorios/pdf_base_styles.html' %}</head>
 <body>
-<div class="pdf-header">
-    <div class="meta">
-        Lote: {{ lote_label }}<br>
-        Gerado em: {{ data_geracao }}
-    </div>
-    <h1>Planilha Analítica de Status dos Processos</h1>
-    <div class="subtitle">Auditoria de Conformidade Previdenciária — RPPS</div>
-</div>
+{% with titulo="Planilha Analítica de Status dos Processos" %}{% include 'relatorios/_pdf_header.html' %}{% endwith %}
 
+<table style="width:100%;border-collapse:separate;border-spacing:4pt 0;margin:8pt 0;">
+    <tr>
+        <td style="border:none;padding:0;width:20%"><div class="stat-cell s-ok"><div class="num">{{ n_conformes }}</div><div class="lbl">Conformes</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-cell s-wn"><div class="num">{{ n_ressalvas }}</div><div class="lbl">Com Ressalvas</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-cell s-nk"><div class="num">{{ n_nao_conformes }}</div><div class="lbl">Não Conformes</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-cell s-nd"><div class="num">{{ n_pendentes }}</div><div class="lbl">Pendentes</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-cell s-tl"><div class="num">{{ processos|length }}</div><div class="lbl">Total de Processos</div></div></td>
+    </tr>
+</table>
+
+<div class="section-title" style="margin-top:0">Relação de Processos</div>
 <table>
     <thead>
         <tr>
-            <th>Processo</th>
-            <th>Beneficiário</th>
-            <th>CPF</th>
-            <th>Tipo Benefício</th>
-            <th>Instituto</th>
-            <th>Lote</th>
-            <th>Dt. Concessão</th>
-            <th>Vl. Concedido</th>
-            <th>Vl. Folha</th>
-            <th>Elegibilidade</th>
-            <th>Cálculo</th>
-            <th>Conf. Folha</th>
-            <th>Resultado</th>
+            <th style="width:7%">Processo</th>
+            <th style="width:15%">Beneficiário</th>
+            <th style="width:10%">CPF</th>
+            <th style="width:8%">Tipo</th>
+            <th style="width:5%">Lote</th>
+            <th style="width:8%">Dt. Concessão</th>
+            <th style="width:7%;text-align:right">Vl. Concedido</th>
+            <th style="width:7%;text-align:right">Vl. Folha</th>
+            <th style="width:9%">Elegibilidade</th>
+            <th style="width:9%">Cálculo</th>
+            <th style="width:7%">Conf. Folha</th>
+            <th style="width:8%">Resultado</th>
         </tr>
     </thead>
     <tbody>
         {% for p in processos %}
-        {% with eleg=p.analiseelegibilidade calc=p.analisecalculo folha=p.conferenciafolha dados=p.dados_beneficio resultado=p.get_resultado_analise %}
+        {% with eleg=p.analiseelegibilidade calc=p.analisecalculo folha=p.conferenciafolha dados=p.dados_beneficio %}
         <tr class="{% cycle 'odd' 'even' %}">
             <td>{{ p.numero }}</td>
-            <td>{{ p.beneficiario.nome }}</td>
+            <td>{{ p.beneficiario.nome|upper }}</td>
             <td>{{ p.beneficiario.cpf }}</td>
-            <td>{{ p.get_tipo_beneficio_display }}</td>
-            <td>{% if p.instituto %}{{ p.instituto.nome }}{% endif %}</td>
-            <td>{% if p.lote %}{{ p.lote.numero }}{% endif %}</td>
-            <td>{% if p.data_concessao %}{{ p.data_concessao|date:"d/m/Y" }}{% endif %}</td>
-            <td>{% if dados %}{% if dados.valor_concedido %}R$ {{ dados.valor_concedido }}{% endif %}{% endif %}</td>
-            <td>{% if dados %}{% if dados.valor_pago_folha %}R$ {{ dados.valor_pago_folha }}{% endif %}{% endif %}</td>
-            <td class="{% if eleg %}{% if eleg.resultado == 'CONFORME' %}ok{% elif eleg.resultado == 'NAO_CONFORME' %}nok{% else %}warn{% endif %}{% endif %}">
-                {% if eleg %}{{ eleg.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td class="{% if calc %}{% if calc.resultado == 'CONFORME' %}ok{% elif calc.resultado == 'NAO_CONFORME' %}nok{% else %}warn{% endif %}{% endif %}">
-                {% if calc %}{{ calc.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td class="{% if folha %}{% if folha.resultado == 'CONFORME' %}ok{% elif folha.resultado == 'NAO_CONFORME' %}nok{% else %}warn{% endif %}{% endif %}">
-                {% if folha %}{{ folha.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td class="badge-{{ resultado|lower|default:'pendente' }}">
-                {{ resultado|default:"Pendente" }}
-            </td>
+            <td style="font-size:6.5pt">{% include 'relatorios/_tipo_abrev.html' with tipo=p.tipo_beneficio %}</td>
+            <td>{% if p.lote %}{{ p.lote.numero }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if p.data_concessao %}{{ p.data_concessao|date:"d/m/Y" }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right">{% if dados and dados.valor_concedido %}{{ dados.valor_concedido }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right">{% if dados and dados.valor_pago_folha %}{{ dados.valor_pago_folha }}{% else %}&mdash;{% endif %}</td>
+            {% include 'relatorios/_resultado_td.html' with resultado=eleg.resultado %}
+            {% include 'relatorios/_resultado_td.html' with resultado=calc.resultado %}
+            {% include 'relatorios/_resultado_td.html' with resultado=folha.resultado %}
+            {% include 'relatorios/_resultado_td.html' with resultado=p.get_resultado_analise %}
         </tr>
         {% endwith %}
         {% empty %}
-        <tr><td colspan="13" style="text-align:center; color:#888;">Nenhum processo encontrado.</td></tr>
+        <tr><td colspan="12" style="text-align:center;color:#888;padding:10pt;">Nenhum processo encontrado.</td></tr>
         {% endfor %}
     </tbody>
 </table>
-
-<p style="font-size:7pt; color:#555; margin-top:6pt;">
-    Total: {{ processos|length }} processo(s) &nbsp;|&nbsp;
-    Conformes: {{ n_conformes }} &nbsp;|&nbsp;
-    Com Ressalvas: {{ n_ressalvas }} &nbsp;|&nbsp;
-    Não Conformes: {{ n_nao_conformes }} &nbsp;|&nbsp;
-    Pendentes: {{ n_pendentes }}
-</p>
 </body>
 </html>

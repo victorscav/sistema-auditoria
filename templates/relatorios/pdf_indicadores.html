@@ -4,29 +4,24 @@
 <meta charset="UTF-8">
 {% include 'relatorios/pdf_base_styles.html' %}
 <style>
-    @page { size: A4 portrait; }
-    .stat-grid { width: 100%; margin-bottom: 10pt; }
-    .stat-cell { width: 16%; text-align: center; padding: 6pt; border: 1pt solid #ddd; background: #F8F9FA; }
-    .stat-cell .num { font-size: 18pt; font-weight: bold; color: #1A3A5C; }
-    .stat-cell .lbl { font-size: 7pt; color: #555; }
+@page {
+    size: A4 portrait;
+    margin: 0 1cm 1.8cm 1cm;
+}
 </style>
 </head>
 <body>
-<div class="pdf-header">
-    <div class="meta">Lote: {{ lote_label }}<br>Gerado em: {{ data_geracao }}</div>
-    <h1>Indicadores Estatísticos de Conformidade</h1>
-    <div class="subtitle">RPPS Barra Mansa — Auditoria de Conformidade Previdenciária</div>
-</div>
+{% with titulo="Indicadores Estatísticos de Conformidade" %}{% include 'relatorios/_pdf_header.html' %}{% endwith %}
 
 <div class="section-title">Resumo Geral</div>
-<table class="stat-grid">
+<table style="border-collapse:separate;border-spacing:4pt 0;margin-bottom:10pt;">
     <tr>
-        <td class="stat-cell"><div class="num">{{ total }}</div><div class="lbl">Total</div></td>
-        <td class="stat-cell"><div class="num" style="color:#155724">{{ n_conformes }}</div><div class="lbl">Conformes</div></td>
-        <td class="stat-cell"><div class="num" style="color:#856404">{{ n_ressalvas }}</div><div class="lbl">Com Ressalvas</div></td>
-        <td class="stat-cell"><div class="num" style="color:#721c24">{{ n_nao_conformes }}</div><div class="lbl">Não Conformes</div></td>
-        <td class="stat-cell"><div class="num" style="color:#555">{{ n_pendentes }}</div><div class="lbl">Pendentes</div></td>
-        <td class="stat-cell"><div class="num" style="color:#1A3A5C">{{ perc_conformidade }}%</div><div class="lbl">% Conformidade</div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-cell s-tot"><div class="num">{{ total }}</div><div class="lbl">Total</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-cell s-ok"><div class="num">{{ n_conformes }}</div><div class="lbl">Conformes</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-cell s-wn"><div class="num">{{ n_ressalvas }}</div><div class="lbl">Com Ressalvas</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-cell s-nk"><div class="num">{{ n_nao_conformes }}</div><div class="lbl">Não Conformes</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-cell s-nd"><div class="num">{{ n_pendentes }}</div><div class="lbl">Pendentes</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-cell s-tl"><div class="num">{{ perc_conformidade }}%</div><div class="lbl">% Conformidade</div></div></td>
     </tr>
 </table>
 
@@ -34,7 +29,7 @@
 <table>
     <thead>
         <tr>
-            <th style="width:35%">Tipo de Benefício</th>
+            <th style="width:36%">Tipo de Benefício</th>
             <th style="text-align:center">Total</th>
             <th style="text-align:center">Conformes</th>
             <th style="text-align:center">Com Ressalvas</th>
@@ -51,12 +46,12 @@
             <td style="text-align:center" class="ok">{{ row.conformes }}</td>
             <td style="text-align:center" class="warn">{{ row.ressalvas }}</td>
             <td style="text-align:center" class="nok">{{ row.nao_conformes }}</td>
-            <td style="text-align:center">{{ row.pendentes }}</td>
+            <td style="text-align:center;color:#718096">{{ row.pendentes }}</td>
             <td style="text-align:center;font-weight:bold">{{ row.perc }}%</td>
         </tr>
         {% endfor %}
         <tr class="total">
-            <td><b>TOTAL GERAL</b></td>
+            <td>TOTAL GERAL</td>
             <td style="text-align:center">{{ total }}</td>
             <td style="text-align:center">{{ n_conformes }}</td>
             <td style="text-align:center">{{ n_ressalvas }}</td>

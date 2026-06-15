@@ -279,7 +279,9 @@ def calcular_valor_esperado(processo):
     Calcula valor_esperado da conferência de folha com base no regime de reajuste.
     MÉDIA + piso → valor esperado = salário mínimo vigente (não aplica tabela INSS).
     MÉDIA acima  → aplica índices INSS após data_concessao até data_ref.
-    PARIDADE     → aplica leis municipais do instituto após data_concessao até data_ref.
+    PARIDADE     → se contracheque tiver ultima_remuneracao_cargo, usa esse valor +
+                   triênio correto (vencimento_base × percentual_trienio / 100).
+                   Caso contrário, aplica leis municipais do instituto.
     Retorna (valor_esperado: Decimal|None, passos: list[dict]).
     """
     import datetime as _dt
@@ -313,8 +315,27 @@ def calcular_valor_esperado(processo):
 
     if regime == 'MEDIA' and data_ref:
         return _calcular_media(dados.valor_concedido, processo.data_concessao, data_ref)
-    elif regime == 'PARIDADE' and data_ref and processo.instituto_id:
-        return _calcular_paridade(processo, dados.valor_concedido, data_ref)
+
+    if regime == 'PARIDADE':
+        # Prioridade 1: demonstrativo importado — extrai vencimento base e triênio
+        # reais e recalcula o esperado com o triênio correto (apenas sobre vencimento base).
+        if contracheque:
+            analise = contracheque.analisar_trienio_demonstrativo()
+            if analise is not None:
+                return analise['valor_esperado_correto'], []
+
+        # Prioridade 2: contracheque com remuneração preenchida manualmente pelo auditor.
+        # ultima_remuneracao_cargo deve ser preenchida SEM o valor do triênio;
+        # o triênio correto é calculado como percentual_trienio % × vencimento_base_paradigma.
+        if contracheque and contracheque.ultima_remuneracao_cargo:
+            base_paridade = Decimal(str(contracheque.ultima_remuneracao_cargo))
+            trienio_correto = contracheque.valor_trienio_calculado or Decimal('0')
+            valor_esperado = (base_paridade + trienio_correto).quantize(Decimal('0.01'))
+            return valor_esperado, []
+
+        # Prioridade 3: leis municipais de reajuste cadastradas no instituto.
+        if data_ref and processo.instituto_id:
+            return _calcular_paridade(processo, dados.valor_concedido, data_ref)
 
     return None, []
 
@@ -382,13 +403,17 @@ def _calcular_paridade(processo, valor_concedido, data_ref):
     return valor, passos
 
 
-def recalcular_conferencia(processo):
+def recalcular_conferencia(processo, salvar=False):
     """
-    Recalcula e persiste valor_esperado, tipo_divergencia e impacto_financeiro
-    na ConferenciaFolha do processo. Cria o objeto se necessário.
-    Chamado tanto pela view de análise quanto pela geração de relatórios.
+    Recalcula valor_esperado, tipo_divergencia, impacto_financeiro e DivergenciaFolha.
+
+    Com salvar=False (padrão): atualiza apenas o objeto em memória para exibição
+    correta em telas e relatórios, sem nenhuma escrita no banco de dados.
+
+    Com salvar=True: persiste todas as alterações, sincroniza divergências automáticas
+    e recalcula tipo_divergencia/impacto. Use apenas em ações explícitas do auditor.
     """
-    from analise.models import ConferenciaFolha
+    from analise.models import ConferenciaFolha, DivergenciaFolha
 
     dados = getattr(processo, 'dados_beneficio', None)
     if not dados or not dados.valor_concedido:
@@ -398,61 +423,419 @@ def recalcular_conferencia(processo):
 
     folha = getattr(processo, 'conferenciafolha', None)
     if folha is None:
-        if valor_esperado is None and not dados.valor_pago_folha:
+        if not salvar or (valor_esperado is None and not dados.valor_pago_folha):
             return
         folha, _ = ConferenciaFolha.objects.get_or_create(processo=processo)
         processo.conferenciafolha = folha
 
-    changed = False
-
+    # Atualiza o objeto em memória (necessário para exibição correta)
     if folha.valor_concedido != dados.valor_concedido:
         folha.valor_concedido = dados.valor_concedido
-        changed = True
 
     vpf = dados.valor_pago_folha
     if vpf is not None and folha.valor_pago_folha != vpf:
         folha.valor_pago_folha = vpf
-        changed = True
 
     if valor_esperado is not None and folha.valor_esperado != valor_esperado:
         folha.valor_esperado = valor_esperado
-        changed = True
 
-    # Só compara quando há um valor_esperado calculado.
-    # Para PARIDADE sem lei aplicável, valor_esperado=None: o pagamento é correto por
-    # definição (concessão já incorpora o salário reajustado), sem referência confiável.
-    base_comp = valor_esperado
-    if base_comp is not None and folha.valor_pago_folha:
-        diff = folha.valor_pago_folha - base_comp
-        # Benefício no piso usa tolerância de R$ 1,00 (SM pode diferir em centavos por arredondamento)
-        sm_concessao_obj = ReajusteINSS.objects.filter(
+    if not salvar:
+        return
+
+    # ── A partir daqui: operações de escrita no banco ─────────────────────────
+    folha.save()
+
+    _sync_divergencias_automaticas(processo, folha, dados, valor_esperado)
+    _recalcular_tipo_divergencia(folha)
+
+
+def _sync_divergencias_automaticas(processo, folha, dados, valor_esperado_correto):
+    """Detecta e sincroniza divergências automáticas no ConferenciaFolha."""
+    from analise.models import DivergenciaFolha
+    regime = dados.regime_reajuste
+    contracheque = getattr(processo, 'contracheque', None)
+    tol = Decimal('0.01')
+
+    # ── 1. Triênio calculado incorretamente (PARIDADE com demonstrativo) ──────
+    analise_trienio = None
+    if regime == 'PARIDADE' and contracheque:
+        try:
+            analise_trienio = contracheque.analisar_trienio_demonstrativo()
+        except Exception:
+            pass
+
+    existing_trienio = folha.divergencias.filter(
+        tipo=DivergenciaFolha.Tipo.TRIENIO_MAIOR,
+        detectado_automaticamente=True
+    ).first()
+
+    if analise_trienio and analise_trienio['tem_divergencia']:
+        valor_div = analise_trienio['pagamento_maior']
+        if existing_trienio:
+            if abs(existing_trienio.valor - valor_div) > tol:
+                existing_trienio.valor = valor_div
+                existing_trienio.save()
+        else:
+            instituto = processo.instituto
+            base_legal = instituto.norma_trienio if instituto and instituto.norma_trienio else ''
+            DivergenciaFolha.objects.create(
+                conferencia=folha,
+                tipo=DivergenciaFolha.Tipo.TRIENIO_MAIOR,
+                impacto=DivergenciaFolha.Impacto.MAIOR,
+                valor=valor_div,
+                descricao=(
+                    f"Triênio de {analise_trienio['trienio_percentual']}% calculado sobre "
+                    f"vencimento base + FG incorporada (R$ {analise_trienio['trienio_pago']}) "
+                    f"em vez de somente sobre o vencimento base "
+                    f"(R$ {analise_trienio['trienio_correto']})."
+                ),
+                base_legal=base_legal,
+                detectado_automaticamente=True,
+            )
+    elif existing_trienio:
+        existing_trienio.delete()
+
+    # ── 2. Reajuste a menor/maior (PARIDADE com lei + demonstrativo) ──────────
+    # Compara o valor que a lei municipal esperaria (sobre valor_concedido) com o
+    # valor que o demonstrativo mostra (corrigido do triênio). Se diferentes, há
+    # uma divergência de reajuste independente da divergência de triênio.
+    if regime == 'PARIDADE' and analise_trienio and processo.data_concessao and processo.instituto_id:
+        import datetime as _dt
+        lei_valor, _ = _calcular_paridade(processo, dados.valor_concedido, _dt.date.today())
+        if lei_valor is not None and dados.valor_pago_folha:
+            # Reajuste comparado direto contra o valor pago na folha —
+            # apuração independente do triênio.
+            valor_pago = Decimal(str(dados.valor_pago_folha))
+            diff_reajuste = (lei_valor - valor_pago).quantize(Decimal('0.01'))
+            # Tolerância de R$ 0,05 para absorver arredondamentos
+            tol_reajuste = Decimal('0.05')
+
+            existing_rej_menor = folha.divergencias.filter(
+                tipo=DivergenciaFolha.Tipo.REAJUSTE_MENOR,
+                detectado_automaticamente=True
+            ).first()
+            existing_rej_maior = folha.divergencias.filter(
+                tipo=DivergenciaFolha.Tipo.REAJUSTE_MAIOR,
+                detectado_automaticamente=True
+            ).first()
+
+            if diff_reajuste > tol_reajuste:
+                # Lei esperaria mais do que o pago na folha → reajuste a menor
+                if existing_rej_menor:
+                    if abs(existing_rej_menor.valor - diff_reajuste) > tol:
+                        existing_rej_menor.valor = diff_reajuste
+                        existing_rej_menor.descricao = (
+                            f"Reajuste aplicado a menor: valor esperado pela lei municipal "
+                            f"R$ {lei_valor}, valor pago na folha R$ {valor_pago}."
+                        )
+                        existing_rej_menor.save()
+                else:
+                    DivergenciaFolha.objects.create(
+                        conferencia=folha,
+                        tipo=DivergenciaFolha.Tipo.REAJUSTE_MENOR,
+                        impacto=DivergenciaFolha.Impacto.MENOR,
+                        valor=diff_reajuste,
+                        descricao=(
+                            f"Reajuste aplicado a menor: valor esperado pela lei municipal "
+                            f"R$ {lei_valor}, valor pago na folha R$ {valor_pago}."
+                        ),
+                        detectado_automaticamente=True,
+                    )
+                if existing_rej_maior:
+                    existing_rej_maior.delete()
+            elif diff_reajuste < -tol_reajuste:
+                # Lei esperaria menos do que o pago na folha → reajuste a maior
+                valor_abs = abs(diff_reajuste)
+                if existing_rej_maior:
+                    if abs(existing_rej_maior.valor - valor_abs) > tol:
+                        existing_rej_maior.valor = valor_abs
+                        existing_rej_maior.descricao = (
+                            f"Reajuste aplicado a maior: valor esperado pela lei municipal "
+                            f"R$ {lei_valor}, valor pago na folha R$ {valor_pago}."
+                        )
+                        existing_rej_maior.save()
+                else:
+                    DivergenciaFolha.objects.create(
+                        conferencia=folha,
+                        tipo=DivergenciaFolha.Tipo.REAJUSTE_MAIOR,
+                        impacto=DivergenciaFolha.Impacto.MAIOR,
+                        valor=valor_abs,
+                        descricao=(
+                            f"Reajuste aplicado a maior: valor esperado pela lei municipal "
+                            f"R$ {lei_valor}, valor pago na folha R$ {valor_pago}."
+                        ),
+                        detectado_automaticamente=True,
+                    )
+                if existing_rej_menor:
+                    existing_rej_menor.delete()
+            else:
+                if existing_rej_menor:
+                    existing_rej_menor.delete()
+                if existing_rej_maior:
+                    existing_rej_maior.delete()
+
+    # ── 3. Divergência geral (MEDIA ou PARIDADE sem demonstrativo) ────────────
+    # Cobre todos os casos não tratados pelos blocos 1 e 2: compara valor_pago
+    # com folha.valor_esperado já calculado e persistido pelo recalcular_conferencia.
+    if not analise_trienio and folha.valor_esperado and dados.valor_pago_folha:
+        valor_pago = Decimal(str(dados.valor_pago_folha))
+        valor_esp  = Decimal(str(folha.valor_esperado))
+        diff = valor_pago - valor_esp
+
+        # Tolerância: R$ 1,00 para benefício no piso (SM pode diferir por arredondamento)
+        sm_obj = ReajusteINSS.objects.filter(
             ano__lte=processo.data_concessao.year
         ).order_by('-ano').first() if processo.data_concessao else None
-        sm_concessao_rc = sm_concessao_obj.salario_minimo if sm_concessao_obj else None
-        is_piso_rc = (sm_concessao_rc is not None
-                      and abs(Decimal(str(folha.valor_concedido)) - sm_concessao_rc) <= Decimal('1.00'))
-        tol = Decimal('1.00') if is_piso_rc else Decimal('0.01')
-        if diff > tol:
+        sm_rc = sm_obj.salario_minimo if sm_obj else None
+        is_piso = (sm_rc is not None
+                   and folha.valor_concedido is not None
+                   and abs(Decimal(str(folha.valor_concedido)) - sm_rc) <= Decimal('1.00'))
+        tol_geral = Decimal('1.00') if is_piso else Decimal('0.05')
+
+        existing_g_menor = folha.divergencias.filter(
+            tipo__in=[DivergenciaFolha.Tipo.REAJUSTE_MENOR, DivergenciaFolha.Tipo.OUTRO_MENOR],
+            detectado_automaticamente=True
+        ).first()
+        existing_g_maior = folha.divergencias.filter(
+            tipo__in=[DivergenciaFolha.Tipo.REAJUSTE_MAIOR, DivergenciaFolha.Tipo.OUTRO_MAIOR],
+            detectado_automaticamente=True
+        ).first()
+
+        if diff < -tol_geral:
+            valor_abs = abs(diff).quantize(Decimal('0.01'))
+            if regime == 'MEDIA':
+                descricao = (
+                    f"Reajuste INSS aplicado a menor: valor esperado R$ {valor_esp}, "
+                    f"valor pago na folha R$ {valor_pago}. "
+                    f"Diferença apurada: R$ {valor_abs} a menor por mês de competência."
+                )
+            else:
+                descricao = (
+                    f"Reajuste aplicado a menor: valor esperado R$ {valor_esp}, "
+                    f"valor pago na folha R$ {valor_pago}. "
+                    f"Diferença apurada: R$ {valor_abs} a menor por mês de competência."
+                )
+            if existing_g_menor:
+                if abs(existing_g_menor.valor - valor_abs) > tol:
+                    existing_g_menor.valor = valor_abs
+                    existing_g_menor.descricao = descricao
+                    existing_g_menor.save()
+            else:
+                DivergenciaFolha.objects.create(
+                    conferencia=folha,
+                    tipo=DivergenciaFolha.Tipo.REAJUSTE_MENOR,
+                    impacto=DivergenciaFolha.Impacto.MENOR,
+                    valor=valor_abs,
+                    descricao=descricao,
+                    detectado_automaticamente=True,
+                )
+            if existing_g_maior:
+                existing_g_maior.delete()
+
+        elif diff > tol_geral:
+            valor_abs = diff.quantize(Decimal('0.01'))
+            if regime == 'MEDIA':
+                descricao = (
+                    f"Reajuste INSS aplicado a maior: valor esperado R$ {valor_esp}, "
+                    f"valor pago na folha R$ {valor_pago}. "
+                    f"Diferença apurada: R$ {valor_abs} a maior por mês de competência."
+                )
+            else:
+                descricao = (
+                    f"Reajuste aplicado a maior: valor esperado R$ {valor_esp}, "
+                    f"valor pago na folha R$ {valor_pago}. "
+                    f"Diferença apurada: R$ {valor_abs} a maior por mês de competência."
+                )
+            if existing_g_maior:
+                if abs(existing_g_maior.valor - valor_abs) > tol:
+                    existing_g_maior.valor = valor_abs
+                    existing_g_maior.descricao = descricao
+                    existing_g_maior.save()
+            else:
+                DivergenciaFolha.objects.create(
+                    conferencia=folha,
+                    tipo=DivergenciaFolha.Tipo.REAJUSTE_MAIOR,
+                    impacto=DivergenciaFolha.Impacto.MAIOR,
+                    valor=valor_abs,
+                    descricao=descricao,
+                    detectado_automaticamente=True,
+                )
+            if existing_g_menor:
+                existing_g_menor.delete()
+
+        else:
+            if existing_g_menor:
+                existing_g_menor.delete()
+            if existing_g_maior:
+                existing_g_maior.delete()
+
+
+def _recalcular_tipo_divergencia(folha):
+    """Atualiza tipo_divergencia e impacto_financeiro_estimado do ConferenciaFolha
+    com base no conjunto atual de divergências (automáticas + manuais)."""
+    from analise.models import DivergenciaFolha, ConferenciaFolha
+
+    divs = list(folha.divergencias.all())
+    if not divs:
+        # Sem divergências registradas: comparação direta pago vs esperado
+        base_comp = folha.valor_esperado
+        if base_comp is not None and folha.valor_pago_folha:
+            diff = folha.valor_pago_folha - base_comp
+            tol = Decimal('0.01')
+            if diff > tol:
+                novo_tipo = ConferenciaFolha.TipoDivergencia.PAGAMENTO_MAIOR
+                novo_impact = diff
+            elif diff < -tol:
+                novo_tipo = ConferenciaFolha.TipoDivergencia.PAGAMENTO_MENOR
+                novo_impact = abs(diff)
+            else:
+                novo_tipo = ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA
+                novo_impact = Decimal('0.00')
+        else:
+            novo_tipo = ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA
+            novo_impact = Decimal('0.00')
+    else:
+        total_maior = sum(d.valor for d in divs if d.impacto == DivergenciaFolha.Impacto.MAIOR)
+        total_menor = sum(d.valor for d in divs if d.impacto == DivergenciaFolha.Impacto.MENOR)
+        net = total_maior - total_menor
+        tol = Decimal('0.01')
+        if total_maior > tol and total_menor > tol:
+            novo_tipo = ConferenciaFolha.TipoDivergencia.COM_DIVERGENCIAS
+            novo_impact = abs(net)
+        elif total_maior > tol:
             novo_tipo = ConferenciaFolha.TipoDivergencia.PAGAMENTO_MAIOR
-            novo_impact = diff
-        elif diff < -tol:
+            novo_impact = total_maior
+        elif total_menor > tol:
             novo_tipo = ConferenciaFolha.TipoDivergencia.PAGAMENTO_MENOR
-            novo_impact = abs(diff)
+            novo_impact = total_menor
         else:
             novo_tipo = ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA
             novo_impact = Decimal('0.00')
 
-        if folha.tipo_divergencia != novo_tipo or folha.impacto_financeiro_estimado != novo_impact:
-            folha.tipo_divergencia = novo_tipo
-            folha.impacto_financeiro_estimado = novo_impact
-            changed = True
-
-    elif base_comp is None:
-        # Sem referência calculada: zera qualquer divergência antiga para não enganar
-        if folha.tipo_divergencia != ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA:
-            folha.tipo_divergencia = ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA
-            folha.impacto_financeiro_estimado = Decimal('0.00')
-            changed = True
-
-    if changed:
+    if folha.tipo_divergencia != novo_tipo or folha.impacto_financeiro_estimado != novo_impact:
+        folha.tipo_divergencia = novo_tipo
+        folha.impacto_financeiro_estimado = novo_impact
         folha.save()
+
+
+def gerar_achados_de_divergencias(processo):
+    """
+    Cria AchadoAuditoria para cada DivergenciaFolha ainda não convertida.
+    Textos completos gerados conforme o tipo de divergência.
+    Retorna a quantidade de achados criados.
+    """
+    from analise.models import DivergenciaFolha, AchadoAuditoria
+
+    folha = getattr(processo, 'conferenciafolha', None)
+    if not folha:
+        return 0
+
+    # Reset flags when achados were deleted externally but flags remain True
+    if folha.divergencias.filter(achado_gerado=True).exists() and not AchadoAuditoria.objects.filter(processo=processo).exists():
+        folha.divergencias.update(achado_gerado=False)
+
+    contracheque = getattr(processo, 'contracheque', None)
+    analise_trienio = None
+    if contracheque:
+        try:
+            analise_trienio = contracheque.analisar_trienio_demonstrativo()
+        except Exception:
+            pass
+
+    instituto = processo.instituto
+    norma_trienio = instituto.norma_trienio if instituto and instituto.norma_trienio else ''
+
+    criados = 0
+    for div in folha.divergencias.filter(achado_gerado=False):
+        descricao = _texto_achado(div, analise_trienio, processo)
+        normas = div.base_legal or norma_trienio if div.tipo == DivergenciaFolha.Tipo.TRIENIO_MAIOR else div.base_legal
+        recomendacao = _recomendacao_achado(div, norma_trienio)
+
+        AchadoAuditoria.objects.create(
+            processo=processo,
+            classificacao=AchadoAuditoria.Classificacao.NAO_CONFORME,
+            descricao=descricao,
+            normas_aplicaveis=normas or '',
+            impacto_financeiro=div.valor,
+            recomendacao=recomendacao,
+        )
+        div.achado_gerado = True
+        div.save(update_fields=['achado_gerado'])
+        criados += 1
+
+    return criados
+
+
+def _texto_achado(div, analise_trienio, processo):
+    from analise.models import DivergenciaFolha
+    dados = getattr(processo, 'dados_beneficio', None)
+
+    if div.tipo == DivergenciaFolha.Tipo.TRIENIO_MAIOR and analise_trienio:
+        pct = analise_trienio['trienio_percentual']
+        venc_base = analise_trienio['vencimento_base']
+        trienio_pago = analise_trienio['trienio_pago']
+        trienio_correto = analise_trienio['trienio_correto']
+        diferenca = analise_trienio['diferenca_trienio']
+        # Base real usada no cálculo incorreto = triênio pago ÷ percentual
+        from decimal import Decimal
+        base_errada = (trienio_pago / (pct / Decimal('100'))).quantize(Decimal('0.01'))
+        return (
+            f"Constatou-se que o adicional por tempo de serviço (triênio) foi calculado sobre "
+            f"base de cálculo incorreta. O percentual de {pct}% foi aplicado sobre o valor de "
+            f"R$ {base_errada} (vencimento base acrescido de gratificação incorporada), "
+            f"resultando no pagamento de R$ {trienio_pago} a título de triênio. "
+            f"O correto, conforme a legislação aplicável, seria aplicar o percentual "
+            f"exclusivamente sobre o vencimento base (R$ {venc_base}), "
+            f"o que corresponderia a R$ {trienio_correto}. "
+            f"Diferença apurada: R$ {diferenca} a maior por mês de competência."
+        )
+
+    if div.tipo == DivergenciaFolha.Tipo.REAJUSTE_MENOR:
+        valor_pago = dados.valor_pago_folha if dados else '—'
+        # Extrai valor esperado da descrição existente ou usa apenas os valores da divergência
+        return (
+            f"Constatou-se que o reajuste previsto na legislação municipal não foi "
+            f"integralmente aplicado ao benefício. O valor pago na folha é de "
+            f"R$ {valor_pago}, inferior ao valor esperado conforme a lei municipal de reajuste. "
+            f"Diferença apurada: R$ {div.valor} a menor por mês de competência. "
+            f"{div.descricao}"
+        )
+
+    if div.tipo == DivergenciaFolha.Tipo.REAJUSTE_MAIOR:
+        valor_pago = dados.valor_pago_folha if dados else '—'
+        return (
+            f"Constatou-se que o valor pago na folha (R$ {valor_pago}) supera o valor "
+            f"esperado conforme a lei municipal de reajuste. "
+            f"Diferença apurada: R$ {div.valor} a maior por mês de competência. "
+            f"{div.descricao}"
+        )
+
+    # Fallback para tipos manuais
+    return div.descricao or div.get_tipo_display()
+
+
+def _recomendacao_achado(div, norma_trienio):
+    from analise.models import DivergenciaFolha
+
+    if div.tipo == DivergenciaFolha.Tipo.TRIENIO_MAIOR:
+        base = f", nos termos de {norma_trienio}" if norma_trienio else ''
+        return (
+            f"Recalcular o adicional por tempo de serviço (triênio) utilizando como base "
+            f"exclusivamente o vencimento base{base}. "
+            f"Proceder à apuração e restituição dos valores pagos a maior."
+        )
+
+    if div.tipo == DivergenciaFolha.Tipo.REAJUSTE_MENOR:
+        return (
+            f"Aplicar o percentual de reajuste previsto na legislação municipal, "
+            f"corrigindo o valor do benefício e pagando as diferenças devidas "
+            f"com efeitos retroativos à data de vigência da lei."
+        )
+
+    if div.tipo == DivergenciaFolha.Tipo.REAJUSTE_MAIOR:
+        return (
+            f"Revisar o valor do benefício para adequá-lo ao esperado pela legislação municipal, "
+            f"apurando e restituindo os valores pagos a maior."
+        )
+
+    return ''

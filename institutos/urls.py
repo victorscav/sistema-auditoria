@@ -14,4 +14,8 @@ urlpatterns = [
     path('<int:instituto_pk>/lei/nova/', views.nova_lei, name='nova_lei'),
     path('lei/<int:pk>/editar/', views.editar_lei, name='editar_lei'),
     path('lei/<int:pk>/excluir/', views.excluir_lei, name='excluir_lei'),
+    path('empresas/', views.lista_empresas, name='empresas'),
+    path('empresas/nova/', views.nova_empresa, name='nova_empresa'),
+    path('empresas/<int:pk>/editar/', views.editar_empresa, name='editar_empresa'),
+    path('empresas/<int:pk>/excluir/', views.excluir_empresa, name='excluir_empresa'),
 ]

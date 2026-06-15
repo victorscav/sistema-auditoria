@@ -4,88 +4,237 @@
 <meta charset="UTF-8">
 {% include 'relatorios/pdf_base_styles.html' %}
 <style>
-    @page first { size: A4 portrait; }
-    .page-break { page-break-before: always; }
-    .kv-table td:first-child { font-weight: bold; color: #1A3A5C; width: 40%; }
-    .summary-row { display: inline-block; width: 15%; text-align: center; padding: 5pt; border: 1pt solid #ddd; margin: 2pt; background: #F8F9FA; }
-    .summary-row .num { font-size: 16pt; font-weight: bold; }
-    .summary-row .lbl { font-size: 6.5pt; color: #555; }
+/* Sobrescreve o @page landscape do pdf_base_styles.html para este relatório */
+@page {
+    size: A4 portrait;
+    margin: 0 1cm 1.8cm 1cm;
+    @bottom-left {
+        content: 'Auditoria RPPS{% if instituto_nome %} — {{ instituto_nome }}{% endif %}{% if lote_label %} · Lote {{ lote_label }}{% endif %} · Gerado em {{ data_geracao }}';
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 6.5pt;
+        color: #4A5568;
+        border-top: 1.5pt solid #2C7A7B;
+        padding-top: 3pt;
+        vertical-align: top;
+    }
+    @bottom-right {
+        content: 'CONFIDENCIAL  Pág. ' counter(page) ' / ' counter(pages);
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 7pt;
+        font-weight: bold;
+        color: #4A5568;
+        border-top: 1.5pt solid #2C7A7B;
+        padding-top: 3pt;
+        vertical-align: top;
+    }
+}
+/* Capa: página inteira sem margens e sem rodapé */
+@page :first {
+    margin: 0;
+    @bottom-left  { content: ''; border: none; }
+    @bottom-right { content: ''; border: none; }
+}
+
+/*
+  Capa: xhtml2pdf ignora CSS max-height/height em <img> — usar atributo HTML height="N".
+  O CSS global td { padding: 3pt 5pt; border-bottom: ... } interfere nas alturas da capa.
+  A classe .capa-td tem especificidade maior (classe > elemento) e redefine esses valores.
+*/
+table.capa-table td {
+    padding: 0;
+    border: none;
+    border-bottom: none;
+    border-top: none;
+    vertical-align: middle;
+    font-size: 8pt;
+    line-height: 1.2;
+}
+
+/* ── Cabeçalho de seção inline (sem quebra forçada) ── */
+.sec-header {
+    background:#4A5568; color:white;
+    margin:18pt -1cm 10pt -1cm;
+    padding:11pt 1cm 9pt 1cm;
+}
+.sec-header .sec-num   { font-size:7pt; letter-spacing:3pt; text-transform:uppercase; color:#A0AEC0; margin-bottom:3pt; }
+.sec-header .sec-title { font-size:13pt; font-weight:bold; letter-spacing:0.4pt; }
+.sec-header .sec-sub   { font-size:7.5pt; color:#A0AEC0; margin-top:3pt; }
+.sec-accent { background:#2C7A7B; height:3pt; margin:0 -1cm 10pt -1cm; }
+
+/* ── Identificação kv ── */
+.kv td:first-child { font-weight:bold; color:#4A5568; width:44%; }
+.kv td             { border-bottom:0.5pt solid #E2E8F0; padding:5pt 6pt; }
+
+/* ── Achados agrupados ── */
+.proc-header {
+    background:#2C7A7B; color:white;
+    font-size:9pt; font-weight:bold;
+    padding:5pt 10pt; margin:12pt 0 3pt 0;
+    page-break-after:avoid;
+}
+.proc-header-meta { font-size:7pt; font-weight:normal; color:#B2DFDB; }
+
 </style>
 </head>
 <body>
 
-<!-- ===== CAPA / RESUMO EXECUTIVO ===== -->
-<div style="text-align:center; margin-top:40pt; margin-bottom:30pt;">
-    <div style="font-size:9pt; color:#555; letter-spacing:2pt; text-transform:uppercase;">Auditoria Técnica Previdenciária</div>
-    <div style="font-size:18pt; font-weight:bold; color:#1A3A5C; margin: 8pt 0 4pt 0;">RELATÓRIO FINAL DE AUDITORIA</div>
-    <div style="font-size:11pt; color:#1A3A5C;">{{ instituto_nome }}</div>
-    <div style="margin-top:10pt; font-size:8pt; color:#555;">
-        Lote: <strong>{{ lote_label }}</strong> &nbsp;·&nbsp; Data: {{ data_geracao }}
-    </div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     CAPA — ocupa a página inteira (297mm × 210mm).
+     @page :first { margin: 0 } garante sem margens.
+     ══════════════════════════════════════════════════════════════════ -->
+<div style="width:100%; height:297mm; page-break-after:always; break-after:page; background:#0D1117;">
+<table class="capa-table" style="width:100%;height:100%;border:none;border-collapse:collapse;margin:0;padding:0;">
+
+  <!-- ── BANDA EMPRESA ── -->
+  <tr style="height:70pt;">
+    <td style="background:#2D3748;text-align:center;vertical-align:middle;padding:0 2cm;">
+      {% if logo_base64 %}
+        <img src="{{ logo_base64 }}" width="80" style="height:auto;" alt="{{ empresa_auditora.nome }}">
+        <div style="font-size:6.5pt;letter-spacing:4pt;text-transform:uppercase;color:#4FD1C5;margin-top:8pt;">Análise de Conformidade Previdenciária &mdash; RPPS</div>
+      {% elif empresa_auditora %}
+        <div style="font-size:13pt;font-weight:bold;color:white;letter-spacing:0.5pt;">{{ empresa_auditora.nome }}</div>
+        <div style="font-size:6.5pt;letter-spacing:4pt;text-transform:uppercase;color:#4FD1C5;margin-top:8pt;">Análise de Conformidade Previdenciária &mdash; RPPS</div>
+      {% else %}
+        <div style="font-size:8pt;font-weight:bold;letter-spacing:3pt;text-transform:uppercase;color:#A0AEC0;">Análise de Conformidade Previdenciária &mdash; RPPS</div>
+      {% endif %}
+    </td>
+  </tr>
+
+  <!-- ── FAIXA TEAL SUPERIOR ── -->
+  <tr style="height:6pt;">
+    <td style="background:#2C7A7B;padding:0;font-size:1pt;line-height:1pt;">&nbsp;</td>
+  </tr>
+
+  <!-- ── BLOCO PRINCIPAL — preenche o espaço restante ── -->
+  <tr>
+    <td style="background:#0D1117;text-align:center;vertical-align:middle;color:white;padding:0 2.5cm;">
+
+      <div style="font-size:7pt;color:#4FD1C5;letter-spacing:8pt;text-transform:uppercase;margin-bottom:30pt;">Relatório Final</div>
+
+      <div style="font-size:34pt;font-weight:bold;color:white;letter-spacing:0.5pt;line-height:1.15;margin-bottom:4pt;">Análise de</div>
+      <div style="font-size:34pt;font-weight:bold;color:white;letter-spacing:0.5pt;line-height:1.15;margin-bottom:12pt;">Conformidade</div>
+
+      <div style="font-size:12pt;font-weight:bold;color:#4FD1C5;letter-spacing:5pt;text-transform:uppercase;margin-bottom:36pt;">Previdenciária</div>
+
+      <div style="background:#2C7A7B;height:1.5pt;margin-bottom:32pt;"></div>
+
+      <div style="font-size:14pt;font-weight:bold;color:#E2E8F0;letter-spacing:0.3pt;line-height:1.4;margin-bottom:24pt;">{{ instituto_nome }}</div>
+
+      <div style="font-size:7.5pt;color:#718096;letter-spacing:3pt;text-transform:uppercase;margin-bottom:6pt;">Lote</div>
+      <div style="font-size:22pt;font-weight:bold;color:#4FD1C5;">{{ lote_label }}</div>
+
+    </td>
+  </tr>
+
+  <!-- ── FAIXA TEAL INFERIOR ── -->
+  <tr style="height:6pt;">
+    <td style="background:#2C7A7B;padding:0;font-size:1pt;line-height:1pt;">&nbsp;</td>
+  </tr>
+
+  <!-- ── RODAPÉ DA CAPA ── -->
+  <tr style="height:46pt;">
+    <td style="background:#0D1117;text-align:center;vertical-align:middle;padding:0 2cm;color:#4A5568;">
+      <span style="font-size:7.5pt;">
+        Gerado em <strong style="color:#718096;">{{ data_geracao }}</strong>
+        &nbsp;&nbsp;&middot;&nbsp;&nbsp;
+        <strong style="color:#718096;letter-spacing:1pt;">Documento Confidencial</strong>
+      </span>
+    </td>
+  </tr>
+
+</table>
 </div>
 
-<div class="section-title">1. Identificação</div>
-<table class="kv-table" style="width:70%">
-    <tr><td>Contratante</td><td>{{ instituto_nome }}</td></tr>
-    <tr><td>Lote</td><td>{{ lote_label }}</td></tr>
-    {% if lote %}<tr><td>Status do Lote</td><td>{{ lote.get_status_display }}</td></tr>
-    <tr><td>Descrição</td><td>{{ lote.descricao }}</td></tr>{% endif %}
-    <tr><td>Data de Geração</td><td>{{ data_geracao }}</td></tr>
-    <tr><td>Total de Processos Analisados</td><td>{{ total }}</td></tr>
+<!-- ══════════════════════════════════════════════════════════
+     SUMÁRIO EXECUTIVO — página 2
+     ══════════════════════════════════════════════════════════ -->
+
+<!-- Cabeçalho de página 2 -->
+<div style="background:#4A5568;color:white;margin:0 -1cm;padding:14pt 1cm 12pt 1cm;">
+    <div style="font-size:14pt;font-weight:bold;letter-spacing:0.5pt;">Sumário Executivo</div>
+    <div style="font-size:8pt;color:#A0AEC0;margin-top:3pt;">
+        {{ instituto_nome }} &nbsp;&middot;&nbsp; Lote {{ lote_label }} &nbsp;&middot;&nbsp; {{ data_geracao }}
+    </div>
+</div>
+<div class="sec-accent"></div>
+
+<!-- 1. Identificação -->
+<div class="section-title" style="page-break-after:avoid;">1. Identificação</div>
+<table class="kv" style="width:62%;margin-bottom:16pt;">
+    <tr class="odd"><td>Contratante</td><td>{{ instituto_nome }}</td></tr>
+    <tr class="even"><td>Lote</td><td>{{ lote_label }}</td></tr>
+    {% if lote %}
+    <tr class="odd"><td>Status do Lote</td><td>{{ lote.get_status_display }}</td></tr>
+    <tr class="even"><td>Descrição</td><td>{{ lote.descricao }}</td></tr>
+    {% endif %}
+    <tr class="odd"><td>Data de Geração</td><td>{{ data_geracao }}</td></tr>
+    <tr class="even"><td>Total de Processos Auditados</td><td><strong>{{ total }}</strong></td></tr>
 </table>
 
-<div class="section-title" style="margin-top:10pt">2. Resultado Consolidado</div>
-<table style="width:100%">
+<!-- 2. Resultado Consolidado -->
+<div class="section-title" style="page-break-after:avoid;">2. Resultado Consolidado</div>
+<table style="width:100%;border-collapse:separate;border-spacing:4pt 0;margin:6pt 0 16pt 0;">
     <tr>
-        <td style="text-align:center;padding:6pt;border:1pt solid #ddd;background:#F8F9FA">
-            <div style="font-size:16pt;font-weight:bold;color:#155724">{{ n_conformes }}</div>
-            <div style="font-size:7pt;color:#555">Conformes</div>
-        </td>
-        <td style="text-align:center;padding:6pt;border:1pt solid #ddd;background:#F8F9FA">
-            <div style="font-size:16pt;font-weight:bold;color:#856404">{{ n_ressalvas }}</div>
-            <div style="font-size:7pt;color:#555">Com Ressalvas</div>
-        </td>
-        <td style="text-align:center;padding:6pt;border:1pt solid #ddd;background:#F8F9FA">
-            <div style="font-size:16pt;font-weight:bold;color:#721c24">{{ n_nao_conformes }}</div>
-            <div style="font-size:7pt;color:#555">Não Conformes</div>
-        </td>
-        <td style="text-align:center;padding:6pt;border:1pt solid #ddd;background:#F8F9FA">
-            <div style="font-size:16pt;font-weight:bold;color:#555">{{ n_pendentes }}</div>
-            <div style="font-size:7pt;color:#555">Pendentes</div>
-        </td>
-        <td style="text-align:center;padding:6pt;border:1pt solid #ddd;background:#1A3A5C">
-            <div style="font-size:16pt;font-weight:bold;color:#fff">{{ perc_conformidade }}%</div>
-            <div style="font-size:7pt;color:#ccc">% Conformidade</div>
-        </td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-box s-ok"><div class="num">{{ n_conformes }}</div><div class="lbl">Conformes</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-box s-wn"><div class="num">{{ n_ressalvas }}</div><div class="lbl">Com Ressalvas</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-box s-nk"><div class="num">{{ n_nao_conformes }}</div><div class="lbl">Não Conformes</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-box s-nd"><div class="num">{{ n_pendentes }}</div><div class="lbl">Pendentes</div></div></td>
+        <td style="border:none;padding:0;width:20%"><div class="stat-box s-tl"><div class="num">{{ perc_conformidade }}%</div><div class="lbl">% Conformidade</div></div></td>
     </tr>
 </table>
 
-<div class="section-title" style="margin-top:10pt">3. Folha de Pagamento</div>
-<table class="kv-table" style="width:60%">
-    <tr><td>Processos com Divergência</td><td>{{ n_divergencias }}</td></tr>
-    <tr><td>Impacto Financeiro Total (R$)</td><td style="color:#721c24;font-weight:bold">R$ {{ total_impacto }}</td></tr>
+<!-- 3. Folha de Pagamento -->
+<div class="section-title" style="page-break-after:avoid;">3. Folha de Pagamento</div>
+<table class="kv" style="width:62%;margin-bottom:16pt;">
+    <tr class="odd"><td>Processos com Divergência Identificada</td><td><strong>{{ n_divergencias }}</strong></td></tr>
+    <tr class="even"><td>Impacto Financeiro Total Estimado</td><td class="nok"><strong>R$ {{ total_impacto }}</strong></td></tr>
 </table>
 
-<div class="section-title" style="margin-top:10pt">4. Achados</div>
-<table class="kv-table" style="width:60%">
-    <tr><td>Total de Achados Registrados</td><td>{{ total_achados }}</td></tr>
-    <tr><td>Achados Não Conformes</td><td>{{ n_achados_nc }}</td></tr>
-    <tr><td>Achados com Recomendação</td><td>{{ n_achados_rec }}</td></tr>
+<!-- 4. Achados -->
+<div class="section-title" style="page-break-after:avoid;">4. Achados</div>
+<table class="kv" style="width:62%;margin-bottom:8pt;">
+    <tr class="odd"><td>Total de Achados Registrados</td><td><strong>{{ total_achados }}</strong></td></tr>
+    <tr class="even"><td>Achados Não Conformes</td><td class="nok"><strong>{{ n_achados_nc }}</strong></td></tr>
+    <tr class="odd"><td>Achados com Recomendação</td><td><strong>{{ n_achados_rec }}</strong></td></tr>
 </table>
 
-<!-- ===== ABA 2: PLANILHA ANALÍTICA ===== -->
-<div class="page-break"></div>
-<div class="pdf-header">
-    <h1>Planilha Analítica de Processos</h1>
-    <div class="subtitle">Lote: {{ lote_label }} · {{ data_geracao }}</div>
+<!-- ══════════════════════════════════════════════════════════
+     5. PLANILHA ANALÍTICA
+     ══════════════════════════════════════════════════════════ -->
+
+<div class="sec-header" style="page-break-inside:avoid; page-break-before:always;">
+    <div class="sec-num">Seção 5</div>
+    <div class="sec-title">Planilha Analítica de Processos</div>
+    <div class="sec-sub">Resultado individual de elegibilidade, cálculo e conferência de folha para cada processo auditado.</div>
 </div>
+<div class="sec-accent"></div>
+
+<table style="width:100%;border-collapse:separate;border-spacing:4pt 0;margin-bottom:10pt;">
+    <tr>
+        <td style="border:none;padding:0;width:16%"><div class="stat-box s-ok"><div class="num">{{ n_conformes }}</div><div class="lbl">Conformes</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-box s-wn"><div class="num">{{ n_ressalvas }}</div><div class="lbl">Com Ressalvas</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-box s-nk"><div class="num">{{ n_nao_conformes }}</div><div class="lbl">Não Conformes</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-box s-nd"><div class="num">{{ n_pendentes }}</div><div class="lbl">Pendentes</div></div></td>
+        <td style="border:none;padding:0;width:16%"><div class="stat-box s-tl"><div class="num">{{ perc_conformidade }}%</div><div class="lbl">% Conformidade</div></div></td>
+        <td style="border:none;padding:0;width:20%"></td>
+    </tr>
+</table>
 
 <table>
     <thead>
         <tr>
-            <th>Processo</th><th>Beneficiário</th><th>CPF</th><th>Tipo</th>
-            <th>Dt. Concessão</th><th>Vl. Concedido</th><th>Vl. Folha</th>
-            <th>Elegib.</th><th>Cálculo</th><th>Folha</th><th>Resultado</th>
+            <th style="width:7%">Processo</th>
+            <th style="width:16%">Beneficiário</th>
+            <th style="width:10%">CPF</th>
+            <th style="width:9%">Tipo</th>
+            <th style="width:7%">Dt. Concessão</th>
+            <th style="width:7%;text-align:right">Vl. Concedido</th>
+            <th style="width:7%;text-align:right">Vl. Folha</th>
+            <th style="width:9%;text-align:center">Elegib.</th>
+            <th style="width:9%;text-align:center">Cálculo</th>
+            <th style="width:9%;text-align:center">Folha</th>
+            <th style="width:10%;text-align:center">Resultado</th>
         </tr>
     </thead>
     <tbody>
@@ -93,94 +242,124 @@
         {% with eleg=p.eleg calc=p.calc folha=p.folha dados=p.dados resultado=p.resultado %}
         <tr class="{% cycle 'odd' 'even' %}">
             <td>{{ p.obj.numero }}</td>
-            <td>{{ p.obj.beneficiario.nome }}</td>
+            <td>{{ p.obj.beneficiario.nome|upper }}</td>
             <td>{{ p.obj.beneficiario.cpf }}</td>
-            <td>{{ p.obj.get_tipo_beneficio_display }}</td>
-            <td>{% if p.obj.data_concessao %}{{ p.obj.data_concessao|date:"d/m/Y" }}{% endif %}</td>
-            <td style="text-align:right">{% if dados and dados.valor_concedido %}{{ dados.valor_concedido }}{% endif %}</td>
-            <td style="text-align:right">{% if dados and dados.valor_pago_folha %}{{ dados.valor_pago_folha }}{% endif %}</td>
-            <td class="badge-{{ eleg.resultado|lower|default:'pendente' }}">
-                {% if eleg %}{{ eleg.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td class="badge-{{ calc.resultado|lower|default:'pendente' }}">
-                {% if calc %}{{ calc.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td class="badge-{{ folha.resultado|lower|default:'pendente' }}">
-                {% if folha %}{{ folha.get_resultado_display }}{% else %}Pendente{% endif %}
-            </td>
-            <td class="badge-{{ resultado|lower|default:'pendente' }}">{{ resultado|default:"Pendente" }}</td>
+            <td style="font-size:6.5pt">{% include 'relatorios/_tipo_abrev.html' with tipo=p.obj.tipo_beneficio %}</td>
+            <td>{% if p.obj.data_concessao %}{{ p.obj.data_concessao|date:"d/m/Y" }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right">{% if dados and dados.valor_concedido %}{{ dados.valor_concedido }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right">{% if dados and dados.valor_pago_folha %}{{ dados.valor_pago_folha }}{% else %}&mdash;{% endif %}</td>
+            {% include 'relatorios/_resultado_td.html' with resultado=eleg.resultado %}
+            {% include 'relatorios/_resultado_td.html' with resultado=calc.resultado %}
+            {% include 'relatorios/_resultado_td.html' with resultado=folha.resultado %}
+            {% include 'relatorios/_resultado_td.html' with resultado=resultado %}
         </tr>
         {% endwith %}
         {% endfor %}
+        {% if not processos %}
+        <tr><td colspan="11" style="text-align:center;color:#888;padding:12pt;">Nenhum processo encontrado.</td></tr>
+        {% endif %}
     </tbody>
 </table>
 
-<!-- ===== DIVERGÊNCIAS ===== -->
+<!-- ══════════════════════════════════════════════════════════
+     6. DIVERGÊNCIAS FINANCEIRAS
+     ══════════════════════════════════════════════════════════ -->
 {% if divergencias %}
-<div class="page-break"></div>
-<div class="pdf-header">
-    <h1>Divergências Financeiras</h1>
-    <div class="subtitle">Lote: {{ lote_label }} · {{ data_geracao }}</div>
+
+<div class="sec-header" style="page-break-inside:avoid; page-break-before:always;">
+    <div class="sec-num">Seção 6</div>
+    <div class="sec-title">Divergências Financeiras</div>
+    <div class="sec-sub">Processos com valor pago em folha divergente do valor concedido e respectivo impacto financeiro estimado.</div>
 </div>
+<div class="sec-accent"></div>
+
+<table style="width:100%;border-collapse:separate;border-spacing:4pt 0;margin-bottom:10pt;">
+    <tr>
+        <td style="border:none;padding:0;width:22%"><div class="stat-box s-nk"><div class="num">{{ n_divergencias }}</div><div class="lbl">Processos com Divergência</div></div></td>
+        <td style="border:none;padding:0;width:32%"><div class="stat-box s-nd"><div class="num">R$ {{ total_impacto }}</div><div class="lbl">Impacto Financeiro Total Estimado</div></div></td>
+        <td style="border:none;padding:0;width:46%"></td>
+    </tr>
+</table>
+
 <table>
     <thead>
         <tr>
-            <th>Processo</th><th>Beneficiário</th><th>Tipo</th>
-            <th>Vl. Concedido</th><th>Vl. Pago</th><th>Divergência</th>
-            <th>Tipo</th><th>Impacto (R$)</th>
+            <th style="width:8%">Processo</th>
+            <th style="width:18%">Beneficiário</th>
+            <th style="width:11%">Tipo</th>
+            <th style="width:11%;text-align:right">Vl. Concedido</th>
+            <th style="width:11%;text-align:right">Vl. Pago Folha</th>
+            <th style="width:9%;text-align:right">Divergência</th>
+            <th style="width:18%">Tipo Divergência</th>
+            <th style="width:14%;text-align:right">Impacto (R$)</th>
         </tr>
     </thead>
     <tbody>
         {% for f in divergencias %}
         <tr class="{% cycle 'odd' 'even' %}">
             <td>{{ f.processo.numero }}</td>
-            <td>{{ f.processo.beneficiario.nome }}</td>
-            <td>{{ f.processo.get_tipo_beneficio_display }}</td>
-            <td style="text-align:right">{% if f.valor_concedido %}{{ f.valor_concedido }}{% endif %}</td>
-            <td style="text-align:right">{% if f.valor_pago_folha %}{{ f.valor_pago_folha }}{% endif %}</td>
-            <td style="text-align:right" class="nok">{% if f.divergencia_valor %}{{ f.divergencia_valor }}{% endif %}</td>
-            <td>{{ f.get_tipo_divergencia_display }}</td>
-            <td style="text-align:right" class="nok">{% if f.impacto_financeiro_estimado %}{{ f.impacto_financeiro_estimado }}{% endif %}</td>
+            <td>{{ f.processo.beneficiario.nome|upper }}</td>
+            <td style="font-size:6.5pt">{% include 'relatorios/_tipo_abrev.html' with tipo=f.processo.tipo_beneficio %}</td>
+            <td style="text-align:right">{% if f.valor_concedido %}{{ f.valor_concedido }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right">{% if f.valor_pago_folha %}{{ f.valor_pago_folha }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right" class="nok">{% if f.divergencia_valor %}{{ f.divergencia_valor }}{% else %}&mdash;{% endif %}</td>
+            <td style="font-size:6.5pt">{{ f.get_tipo_divergencia_display }}</td>
+            <td style="text-align:right" class="nok">{% if f.impacto_financeiro_estimado %}{{ f.impacto_financeiro_estimado }}{% else %}&mdash;{% endif %}</td>
         </tr>
         {% endfor %}
         <tr class="total">
-            <td colspan="7" style="text-align:right">TOTAL DO IMPACTO</td>
+            <td colspan="7" style="text-align:right">TOTAL DO IMPACTO FINANCEIRO ESTIMADO</td>
             <td style="text-align:right">R$ {{ total_impacto }}</td>
         </tr>
     </tbody>
 </table>
+
 {% endif %}
 
-<!-- ===== ACHADOS E RECOMENDAÇÕES ===== -->
+<!-- ══════════════════════════════════════════════════════════
+     7. ACHADOS E RECOMENDAÇÕES
+     ══════════════════════════════════════════════════════════ -->
 {% if achados %}
-<div class="page-break"></div>
-<div class="pdf-header">
-    <h1>Achados e Recomendações</h1>
-    <div class="subtitle">Lote: {{ lote_label }} · {{ data_geracao }}</div>
+
+<div class="sec-header" style="page-break-inside:avoid; page-break-before:always;">
+    <div class="sec-num">Seção 7</div>
+    <div class="sec-title">Achados e Recomendações</div>
+    <div class="sec-sub">Achados registrados durante a auditoria, agrupados por processo, com base legal e recomendações técnicas.</div>
 </div>
-<table>
-    <thead>
-        <tr>
-            <th>Processo</th><th>Beneficiário</th><th>Classificação</th>
-            <th>Descrição</th><th>Normas</th><th>Impacto (R$)</th><th>Recomendação</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for a in achados %}
-        <tr class="{% cycle 'odd' 'even' %}">
-            <td>{{ a.processo.numero }}</td>
-            <td>{{ a.processo.beneficiario.nome }}</td>
-            <td class="badge-{{ a.classificacao|lower }}">{{ a.get_classificacao_display }}</td>
-            <td>{{ a.descricao }}</td>
-            <td style="font-size:6.5pt">{{ a.fundamentacao_combinada }}</td>
-            <td style="text-align:right" class="{% if a.impacto_financeiro %}nok{% endif %}">
-                {% if a.impacto_financeiro %}{{ a.impacto_financeiro }}{% endif %}
-            </td>
-            <td style="font-size:6.5pt">{{ a.recomendacao }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="sec-accent"></div>
+
+{% regroup achados by processo as grupos_achados %}
+{% for grupo in grupos_achados %}
+<div style="page-break-inside:avoid;margin-bottom:14pt;">
+    <div class="proc-header">
+        Proc. {{ grupo.grouper.numero }} &mdash; {{ grupo.grouper.beneficiario.nome|upper }}
+        <span class="proc-header-meta">
+            &nbsp;&nbsp;|&nbsp;&nbsp; CPF: {{ grupo.grouper.beneficiario.cpf }}
+            {% if grupo.grouper.tipo_beneficio %}&nbsp;&middot;&nbsp; {% include 'relatorios/_tipo_abrev.html' with tipo=grupo.grouper.tipo_beneficio %}{% endif %}
+        </span>
+    </div>
+    {% for a in grupo.list %}
+    <div class="achado-box">
+        <div style="margin-bottom:4pt;">
+            <strong style="font-size:7.5pt;color:#4A5568;text-transform:uppercase;">{{ a.get_classificacao_display }}</strong>
+            {% if a.impacto_financeiro %}
+            <span style="font-size:7pt;color:#9B2C2C;margin-left:12pt;">Impacto estimado: <strong>R$ {{ a.impacto_financeiro }}</strong></span>
+            {% endif %}
+        </div>
+        <div style="font-size:8pt;color:#2D3748;margin-bottom:5pt;line-height:1.4;">{{ a.descricao }}</div>
+        {% if a.fundamentacao_combinada %}
+        <div style="font-size:7pt;color:#4A5568;margin-bottom:3pt;"><strong>Base Legal:</strong> {{ a.fundamentacao_combinada }}</div>
+        {% endif %}
+        {% if a.recomendacao %}
+        <div style="font-size:7.5pt;color:#276749;border-left:2pt solid #2C7A7B;padding-left:7pt;margin-top:5pt;line-height:1.4;">
+            <strong>Recomendação:</strong> {{ a.recomendacao }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+
 {% endif %}
 
 </body>

@@ -2,69 +2,75 @@
 <html>
 <head><meta charset="UTF-8">{% include 'relatorios/pdf_base_styles.html' %}</head>
 <body>
-<div class="pdf-header">
-    <div class="meta">Lote: {{ lote_label }}<br>Gerado em: {{ data_geracao }}</div>
-    <h1>Planilha de Conferência da Folha de Inativos</h1>
-    <div class="subtitle">RPPS Barra Mansa — Valores Concedidos, Pagos, Rubricas, Divergências e Recomendações</div>
-</div>
+{% with titulo="Planilha de Conferência da Folha de Inativos" %}{% include 'relatorios/_pdf_header.html' %}{% endwith %}
 
+<div class="section-title" style="margin-top:8pt">Conferência por Processo</div>
 <table>
     <thead>
         <tr>
-            <th>Processo</th>
-            <th>Beneficiário</th>
-            <th>CPF</th>
-            <th>Matrícula</th>
-            <th>Tipo</th>
-            <th>Vl. Concedido</th>
-            <th>Vl. Folha</th>
-            <th>Divergência</th>
-            <th>Tipo Diverg.</th>
-            <th>Rubricas</th>
-            <th>Reajuste</th>
-            <th>Teto</th>
-            <th>Impacto (R$)</th>
-            <th>Resultado</th>
-            <th>Recomendações</th>
+            <th style="width:7%">Processo</th>
+            <th style="width:13%">Beneficiário</th>
+            <th style="width:9%">CPF</th>
+            <th style="width:4%">Matr.</th>
+            <th style="width:9%">Tipo</th>
+            <th style="width:7%;text-align:right">Vl. Concedido</th>
+            <th style="width:7%;text-align:right">Vl. Folha</th>
+            <th style="width:7%;text-align:right">Divergência</th>
+            <th style="width:10%">Tipo Diverg.</th>
+            <th style="width:4%">Rubr.</th>
+            <th style="width:4%">Reaj.</th>
+            <th style="width:4%">Teto</th>
+            <th style="width:7%;text-align:right">Impacto (R$)</th>
+            <th style="width:8%">Resultado</th>
         </tr>
     </thead>
     <tbody>
         {% for p in processos %}
-        {% with folha=p.folha dados=p.dados %}
+        {% with folha=p.folha %}
         <tr class="{% cycle 'odd' 'even' %}">
             <td>{{ p.obj.numero }}</td>
-            <td>{{ p.obj.beneficiario.nome }}</td>
+            <td>{{ p.obj.beneficiario.nome|upper }}</td>
             <td>{{ p.obj.beneficiario.cpf }}</td>
-            <td>{{ p.obj.beneficiario.matricula }}</td>
-            <td>{{ p.obj.get_tipo_beneficio_display }}</td>
-            <td style="text-align:right">{% if folha and folha.valor_concedido %}{{ folha.valor_concedido }}{% endif %}</td>
-            <td style="text-align:right">{% if folha and folha.valor_pago_folha %}{{ folha.valor_pago_folha }}{% endif %}</td>
+            <td>{{ p.obj.beneficiario.matricula|default:"&mdash;" }}</td>
+            <td style="font-size:6.5pt">{% include 'relatorios/_tipo_abrev.html' with tipo=p.obj.tipo_beneficio %}</td>
+            <td style="text-align:right">{% if folha and folha.valor_concedido %}{{ folha.valor_concedido }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right">{% if folha and folha.valor_pago_folha %}{{ folha.valor_pago_folha }}{% else %}&mdash;{% endif %}</td>
             <td style="text-align:right" class="{% if p.tem_divergencia %}nok{% endif %}">
-                {% if p.divergencia_valor %}{{ p.divergencia_valor }}{% endif %}
+                {% if p.divergencia_valor %}{{ p.divergencia_valor }}{% else %}&mdash;{% endif %}
             </td>
-            <td>{% if folha %}{{ folha.get_tipo_divergencia_display }}{% endif %}</td>
-            <td class="{% if folha and folha.rubricas_ok == True %}ok{% elif folha and folha.rubricas_ok == False %}nok{% endif %}">
-                {% if folha and folha.rubricas_ok is not None %}{% if folha.rubricas_ok %}Conforme{% else %}Não Conforme{% endif %}{% else %}—{% endif %}
+            <td style="font-size:6.5pt">{% if folha %}{{ folha.get_tipo_divergencia_display }}{% else %}&mdash;{% endif %}</td>
+            <td style="font-size:7pt" class="{% if folha and folha.rubricas_ok == True %}ok{% elif folha and folha.rubricas_ok == False %}nok{% endif %}">
+                {% if folha and folha.rubricas_ok is not None %}{% if folha.rubricas_ok %}OK{% else %}NOK{% endif %}{% else %}&mdash;{% endif %}
             </td>
-            <td class="{% if folha and folha.reajuste_aplicado_ok == True %}ok{% elif folha and folha.reajuste_aplicado_ok == False %}nok{% endif %}">
-                {% if folha and folha.reajuste_aplicado_ok is not None %}{% if folha.reajuste_aplicado_ok %}Conforme{% else %}Não Conforme{% endif %}{% else %}—{% endif %}
+            <td style="font-size:7pt" class="{% if folha and folha.reajuste_aplicado_ok == True %}ok{% elif folha and folha.reajuste_aplicado_ok == False %}nok{% endif %}">
+                {% if folha and folha.reajuste_aplicado_ok is not None %}{% if folha.reajuste_aplicado_ok %}OK{% else %}NOK{% endif %}{% else %}&mdash;{% endif %}
             </td>
-            <td class="{% if folha and folha.teto_constitucional_ok == True %}ok{% elif folha and folha.teto_constitucional_ok == False %}nok{% endif %}">
-                {% if folha and folha.teto_constitucional_ok is not None %}{% if folha.teto_constitucional_ok %}Conforme{% else %}Não Conforme{% endif %}{% else %}—{% endif %}
+            <td style="font-size:7pt" class="{% if folha and folha.teto_constitucional_ok == True %}ok{% elif folha and folha.teto_constitucional_ok == False %}nok{% endif %}">
+                {% if folha and folha.teto_constitucional_ok is not None %}{% if folha.teto_constitucional_ok %}OK{% else %}NOK{% endif %}{% else %}&mdash;{% endif %}
             </td>
             <td style="text-align:right" class="{% if folha and folha.impacto_financeiro_estimado %}nok{% endif %}">
-                {% if folha and folha.impacto_financeiro_estimado %}{{ folha.impacto_financeiro_estimado }}{% endif %}
+                {% if folha and folha.impacto_financeiro_estimado %}{{ folha.impacto_financeiro_estimado }}{% else %}&mdash;{% endif %}
             </td>
-            <td class="badge-{{ p.resultado|lower|default:'pendente' }}">
-                {{ p.resultado|default:"Pendente" }}
-            </td>
-            <td style="font-size:6.5pt">{{ p.recomendacoes }}</td>
+            {% include 'relatorios/_resultado_td.html' with resultado=p.resultado %}
         </tr>
         {% endwith %}
         {% empty %}
-        <tr><td colspan="15" style="text-align:center;color:#888;">Nenhum processo encontrado.</td></tr>
+        <tr><td colspan="14" style="text-align:center;color:#888;padding:10pt;">Nenhum processo encontrado.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+
+{% if has_recomendacoes %}
+<div class="section-title" style="margin-top:12pt">Recomendações Técnicas</div>
+{% for p in processos %}{% if p.recomendacoes %}
+<div class="achado-box">
+    <div style="margin-bottom:3pt;font-weight:bold;color:#4A5568;font-size:7.5pt">
+        Proc. {{ p.obj.numero }} &mdash; {{ p.obj.beneficiario.nome|upper }}
+    </div>
+    <div style="font-size:7.5pt">{{ p.recomendacoes }}</div>
+</div>
+{% endif %}{% endfor %}
+{% endif %}
+
 </body>
 </html>

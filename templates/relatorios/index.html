@@ -35,6 +35,13 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if empresas %}
+                    <div class="mb-2">
+                        <select name="empresa_auditora" class="form-select form-select-sm">
+                            {% for ea in empresas %}<option value="{{ ea.pk }}">{{ ea }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
                     <button type="submit" class="btn btn-success w-100 btn-sm">
                         <i class="bi bi-download me-1"></i>Exportar Excel
                     </button>
@@ -65,6 +72,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if empresas %}<div class="mb-2"><select name="empresa_auditora" class="form-select form-select-sm">{% for ea in empresas %}<option value="{{ ea.pk }}">{{ ea }}</option>{% endfor %}</select></div>{% endif %}
                     <button type="submit" class="btn btn-danger w-100 btn-sm">
                         <i class="bi bi-download me-1"></i>Exportar Excel
                     </button>
@@ -95,6 +103,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if empresas %}<div class="mb-2"><select name="empresa_auditora" class="form-select form-select-sm">{% for ea in empresas %}<option value="{{ ea.pk }}">{{ ea }}</option>{% endfor %}</select></div>{% endif %}
                     <button type="submit" class="btn btn-primary w-100 btn-sm">
                         <i class="bi bi-download me-1"></i>Exportar Excel
                     </button>
@@ -125,6 +134,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if empresas %}<div class="mb-2"><select name="empresa_auditora" class="form-select form-select-sm">{% for ea in empresas %}<option value="{{ ea.pk }}">{{ ea }}</option>{% endfor %}</select></div>{% endif %}
                     <button type="submit" class="btn btn-info w-100 btn-sm text-white">
                         <i class="bi bi-download me-1"></i>Exportar Excel
                     </button>
@@ -155,6 +165,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if empresas %}<div class="mb-2"><select name="empresa_auditora" class="form-select form-select-sm">{% for ea in empresas %}<option value="{{ ea.pk }}">{{ ea }}</option>{% endfor %}</select></div>{% endif %}
                     <button type="submit" class="btn btn-warning w-100 btn-sm">
                         <i class="bi bi-download me-1"></i>Exportar Excel
                     </button>
@@ -185,6 +196,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if empresas %}<div class="mb-2"><select name="empresa_auditora" class="form-select form-select-sm">{% for ea in empresas %}<option value="{{ ea.pk }}">{{ ea }}</option>{% endfor %}</select></div>{% endif %}
                     <button type="submit" class="btn btn-primary w-100 btn-sm">
                         <i class="bi bi-download me-1"></i>Exportar Excel Completo
                     </button>

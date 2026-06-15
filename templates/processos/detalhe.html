@@ -18,6 +18,13 @@
         <a href="{% url 'processos:editar' processo.pk %}" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-pencil me-1"></i>Editar
         </a>
+        <form method="post" action="{% url 'processos:excluir' processo.pk %}" class="d-inline"
+              onsubmit="return confirm('Excluir o processo {{ processo.numero }}? Esta ação não pode ser desfeita.')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-trash me-1"></i>Excluir
+            </button>
+        </form>
         <a href="{% url 'analise:analise' processo.pk %}" class="btn btn-primary btn-sm">
             <i class="bi bi-clipboard-check me-1"></i>Analisar
         </a>
@@ -168,9 +175,22 @@
                     {% endif %}
 
                     {% if regime_paridade %}
-                    <dt class="col-sm-5 text-muted small">Última Remuneração do Cargo</dt>
+                    <dt class="col-sm-5 text-muted small">Rem. Paradigma (sem triênio)</dt>
                     <dd class="col-sm-7 fw-semibold">
                         {% if contracheque.ultima_remuneracao_cargo %}R$ {{ contracheque.ultima_remuneracao_cargo }}{% else %}—{% endif %}
+                    </dd>
+                    <dt class="col-sm-5 text-muted small">Vencimento Base Paradigma</dt>
+                    <dd class="col-sm-7">
+                        {% if contracheque.vencimento_base_paradigma %}R$ {{ contracheque.vencimento_base_paradigma }}{% else %}—{% endif %}
+                    </dd>
+                    <dt class="col-sm-5 text-muted small">Triênio</dt>
+                    <dd class="col-sm-7">
+                        {% if contracheque.percentual_trienio %}
+                            {{ contracheque.percentual_trienio }}%
+                            {% if contracheque.valor_trienio_calculado %}
+                                = R$ {{ contracheque.valor_trienio_calculado }}
+                            {% endif %}
+                        {% else %}—{% endif %}
                     </dd>
                     <dt class="col-sm-5 text-muted small">Lei de Reajuste Municipal</dt>
                     <dd class="col-sm-7">{{ contracheque.lei_reajuste_municipal|default:"—" }}</dd>
@@ -950,11 +970,56 @@ function calcularTempoCertidao() {
                         {% else %}
                         <!-- PARIDADE: última remuneração + lei municipal -->
                         <div class="col-md-8">
-                            <label class="form-label fw-semibold">Última Remuneração do Cargo Efetivo Paradigma (R$)</label>
+                            <label class="form-label fw-semibold">Remuneração do Cargo Paradigma — SEM triênio (R$)</label>
                             <input type="number" name="ultima_remuneracao_cargo" class="form-control" step="0.01" min="0"
                                    value="{% if contracheque %}{{ contracheque.ultima_remuneracao_cargo|default:'' }}{% endif %}"
                                    placeholder="0,00">
-                            <small class="text-muted">Remuneração atual do servidor ativo no cargo equivalente ao paradigma</small>
+                            <small class="text-muted">Remuneração atual do cargo paradigma <strong>excluindo o triênio</strong>. O triênio é calculado e somado automaticamente abaixo.</small>
+                        </div>
+
+                        {% if instituto and instituto.norma_trienio %}
+                        <div class="col-12">
+                            <div class="alert alert-secondary py-2 small mb-0">
+                                <i class="bi bi-book me-1"></i>
+                                <strong>Base legal do triênio:</strong> {{ instituto.norma_trienio }}<br>
+                                1º triênio: <strong>{{ instituto.trienio_primeiro_percentual }}%</strong> |
+                                Demais: <strong>{{ instituto.trienio_demais_percentual }}%</strong> cada |
+                                Limite: <strong>{{ instituto.trienio_limite_periodos }} triênios</strong> |
+                                Base de cálculo: <strong>vencimento base</strong>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Vencimento Base do Cargo Paradigma (R$)</label>
+                            <input type="number" name="vencimento_base_paradigma" id="id_vencimento_base_paradigma"
+                                   class="form-control" step="0.01" min="0"
+                                   value="{% if contracheque %}{{ contracheque.vencimento_base_paradigma|default:'' }}{% endif %}"
+                                   placeholder="0,00">
+                            <small class="text-muted">Apenas a parcela do vencimento básico, sem adicionais. Base de cálculo do triênio.</small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Percentual do Triênio (%)</label>
+                            <div class="input-group">
+                                <input type="number" name="percentual_trienio" id="id_percentual_trienio"
+                                       class="form-control" step="0.01" min="0"
+                                       value="{% if contracheque %}{{ contracheque.percentual_trienio|default:'' }}{% endif %}"
+                                       placeholder="0,00">
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <small class="text-muted">Triênio/anuênio total acumulado. Calculado sobre o vencimento base.</small>
+                        </div>
+
+                        <div class="col-md-2 d-flex align-items-end">
+                            <div class="w-100 border rounded p-2 text-center bg-light">
+                                <small class="text-muted d-block" style="font-size:0.7rem;">Valor Triênio</small>
+                                <span class="fw-bold text-primary" id="id_valor_trienio_calc">
+                                    {% if contracheque and contracheque.valor_trienio_calculado %}
+                                        R$ {{ contracheque.valor_trienio_calculado }}
+                                    {% else %}—{% endif %}
+                                </span>
+                            </div>
                         </div>
 
                         <div class="col-12">
@@ -999,6 +1064,30 @@ function calcularTempoCertidao() {
         </div>
     </div>
 </div>
+
+<!-- Cálculo do triênio em tempo real -->
+<script>
+(function () {
+    function calcTrienio() {
+        var base = parseFloat(document.getElementById('id_vencimento_base_paradigma').value) || 0;
+        var pct  = parseFloat(document.getElementById('id_percentual_trienio').value) || 0;
+        var el   = document.getElementById('id_valor_trienio_calc');
+        if (!el) return;
+        if (base > 0 && pct > 0) {
+            var val = (base * pct / 100).toFixed(2).replace('.', ',');
+            el.textContent = 'R$ ' + val.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        } else {
+            el.textContent = '—';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        var b = document.getElementById('id_vencimento_base_paradigma');
+        var p = document.getElementById('id_percentual_trienio');
+        if (b) b.addEventListener('input', calcTrienio);
+        if (p) p.addEventListener('input', calcTrienio);
+    });
+})();
+</script>
 
 <!-- Auto-abre o modal se contracheque ainda não foi informado -->
 {% if solicitar_contracheque %}

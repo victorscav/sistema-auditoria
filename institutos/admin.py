@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Instituto, RegraAposentadoria
+from .models import Instituto, RegraAposentadoria, EmpresaAuditora
+
+
+@admin.register(EmpresaAuditora)
+class EmpresaAuditoraAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'sigla', 'cnpj', 'ativa')
+    search_fields = ('nome', 'sigla')
 
 
 class RegraAposentadoriaInline(admin.TabularInline):

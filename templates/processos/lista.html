@@ -11,6 +11,21 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0 fw-bold">Processos</h4>
     <div class="d-flex gap-2">
+        <form method="post" action="{% url 'analise:gerar_todos_achados' %}">
+            {% csrf_token %}
+            {% if divergencias_pendentes %}
+            <button type="submit" class="btn btn-warning btn-sm"
+                    onclick="return confirm('Gerar achados automáticos para {{ divergencias_pendentes }} divergência(s) pendente(s)?')">
+                <i class="bi bi-magic me-1"></i>Gerar achados
+                <span class="badge bg-dark ms-1">{{ divergencias_pendentes }}</span>
+            </button>
+            {% else %}
+            <button type="submit" class="btn btn-outline-success btn-sm">
+                <i class="bi bi-magic me-1"></i>Gerar achados
+                <span class="badge bg-success ms-1">✓</span>
+            </button>
+            {% endif %}
+        </form>
         <a href="{% url 'processos:importar_pdf' %}" class="btn btn-outline-danger btn-sm">
             <i class="bi bi-file-earmark-pdf me-1"></i>Importar PDF
         </a>
@@ -96,9 +111,9 @@
                         </td>
                         <td>{{ processo.lote.numero|default:"-" }}</td>
                         <td>
-                            {% with resultado=processo.get_resultado_analise %}
+                            {% with resultado=processo.get_resultado_analise resultado_label=processo.get_resultado_analise_display %}
                             {% if resultado %}
-                                <span class="badge badge-{{ resultado|lower }}">{{ resultado }}</span>
+                                <span class="badge badge-{{ resultado|lower }}">{{ resultado_label }}</span>
                             {% else %}
                                 <span class="text-muted small">-</span>
                             {% endif %}
@@ -111,6 +126,13 @@
                             <a href="{% url 'analise:analise' processo.pk %}" class="btn btn-sm btn-outline-secondary py-0">
                                 <i class="bi bi-clipboard-check"></i>
                             </a>
+                            <form method="post" action="{% url 'processos:excluir' processo.pk %}" class="d-inline"
+                                  onsubmit="return confirm('Excluir o processo {{ processo.numero }}?')">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% empty %}

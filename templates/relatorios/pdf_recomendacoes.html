@@ -3,53 +3,52 @@
 <head>
 <meta charset="UTF-8">
 {% include 'relatorios/pdf_base_styles.html' %}
-<style>@page { size: A4 portrait; }</style>
+<style>
+@page {
+    size: A4 portrait;
+    margin: 0 1cm 1.8cm 1cm;
+}
+</style>
 </head>
 <body>
-<div class="pdf-header">
-    <div class="meta">Lote: {{ lote_label }}<br>Gerado em: {{ data_geracao }}</div>
-    <h1>Recomendações Técnicas para Saneamento</h1>
-    <div class="subtitle">RPPS Barra Mansa — Achados de Auditoria e Medidas Corretivas</div>
-</div>
+{% with titulo="Recomendações Técnicas para Saneamento" %}{% include 'relatorios/_pdf_header.html' %}{% endwith %}
 
 {% if not achados %}
-<p style="text-align:center;color:#888;margin-top:20pt;">Nenhum achado registrado para os filtros selecionados.</p>
+<div class="obs-box" style="margin-top:12pt;color:#718096;font-style:italic;">
+    Nenhum achado registrado para os filtros selecionados.
+</div>
 {% endif %}
 
 {% for achado in achados %}
 {% ifchanged achado.processo.pk %}
-<div class="section-sub" style="margin-top:8pt">
-    Processo: {{ achado.processo.numero }} — {{ achado.processo.beneficiario.nome }}
-    ({{ achado.processo.get_tipo_beneficio_display }}){% if achado.processo.lote %} · Lote {{ achado.processo.lote.numero }}{% endif %}
+<div class="section-sub" style="margin-top:10pt">
+    Processo {{ achado.processo.numero }} &mdash; {{ achado.processo.beneficiario.nome|upper }}
+    &nbsp;({{ achado.processo.get_tipo_beneficio_display }}){% if achado.processo.lote %} &middot; Lote {{ achado.processo.lote.numero }}{% endif %}
 </div>
 {% endifchanged %}
 
-<table style="margin-bottom:4pt">
-    <tr>
-        <th style="width:18%">Classificação</th>
-        <th style="width:42%">Descrição do Achado</th>
-        <th style="width:22%">Normas Aplicáveis</th>
-        <th style="width:18%">Recomendação</th>
-    </tr>
-    <tr>
-        <td class="badge-{{ achado.classificacao|lower }}">{{ achado.get_classificacao_display }}</td>
-        <td>{{ achado.descricao }}</td>
-        <td style="font-size:6.5pt">{{ achado.fundamentacao_combinada }}</td>
-        <td style="font-size:6.5pt">{{ achado.recomendacao }}</td>
-    </tr>
-    {% if achado.impacto_financeiro %}
-    <tr>
-        <td colspan="3" style="font-size:6.5pt;color:#721c24;font-weight:bold">
-            Impacto financeiro estimado: R$ {{ achado.impacto_financeiro }}
-        </td>
-        <td></td>
-    </tr>
+<div class="achado-box">
+    <div style="margin-bottom:4pt">
+        <span class="badge-{{ achado.classificacao|lower }}">{{ achado.get_classificacao_display }}</span>
+        <span style="font-size:7pt;color:#718096;margin-left:8pt">{{ achado.data_registro|date:"d/m/Y" }}</span>
+    </div>
+    <div style="margin-bottom:5pt;font-size:8.5pt">{{ achado.descricao }}</div>
+    {% if achado.fundamentacao_combinada %}
+    <div style="font-size:7.5pt;color:#555"><strong>Normas aplicáveis:</strong> {{ achado.fundamentacao_combinada }}</div>
     {% endif %}
-</table>
+    {% if achado.impacto_financeiro %}
+    <div style="font-size:7.5pt;color:#9B2C2C;margin-top:2pt"><strong>Impacto financeiro estimado:</strong> R$ {{ achado.impacto_financeiro }}</div>
+    {% endif %}
+    {% if achado.recomendacao %}
+    <div style="font-size:7.5pt;color:#276749;margin-top:2pt"><strong>Recomendação:</strong> {{ achado.recomendacao }}</div>
+    {% endif %}
+</div>
 {% endfor %}
 
-<p style="font-size:7pt;color:#555;margin-top:10pt;border-top:0.5pt solid #ccc;padding-top:4pt">
-    Total de achados: {{ achados|length }}
-</p>
+{% if achados %}
+<div class="section-sub" style="margin-top:10pt">
+    Total de achados registrados: <strong>{{ achados|length }}</strong>
+</div>
+{% endif %}
 </body>
 </html>

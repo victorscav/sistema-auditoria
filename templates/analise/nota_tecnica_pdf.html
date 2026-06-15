@@ -3,370 +3,568 @@
 <head>
 <meta charset="UTF-8">
 <style>
-    @page {
-        size: A4 portrait;
-        margin: 2cm 1.5cm 2cm 1.5cm;
-        @frame footer {
-            -pdf-frame-content: footer_content;
-            bottom: 0.5cm; height: 0.8cm;
-        }
-    }
-    body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #222; }
-    h1 { font-size: 14pt; color: #1A3A5C; margin: 0 0 3pt 0; }
-    h2 { font-size: 10pt; color: #1A3A5C; margin: 12pt 0 4pt 0; border-bottom: 1pt solid #1A3A5C; padding-bottom: 2pt; }
-    .header { border-bottom: 2pt solid #1A3A5C; padding-bottom: 6pt; margin-bottom: 10pt; }
-    .subtitle { font-size: 8pt; color: #555; }
-    .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 8pt; }
-    .meta-table td { font-size: 8.5pt; padding: 3pt 5pt; border: 0.5pt solid #ddd; }
-    .meta-table td:first-child { font-weight: bold; color: #1A3A5C; width: 35%; background: #F0F4F8; }
-    .check-table { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
-    .check-table th { background: #1A3A5C; color: #fff; font-size: 8pt; padding: 3pt 5pt; text-align: left; border: 0.5pt solid #0d2340; }
-    .check-table td { font-size: 8pt; padding: 2.5pt 5pt; border: 0.5pt solid #ccc; vertical-align: top; }
-    .check-table tr.even td { background: #F8F9FA; }
-    .ok { color: #155724; font-weight: bold; }
-    .nok { color: #721c24; font-weight: bold; }
-    .warn { color: #856404; font-weight: bold; }
-    .texto-nota { border: 1pt solid #ccc; padding: 8pt; background: #FAFAFA; font-size: 9pt; line-height: 1.5; min-height: 60pt; }
-    .limitacao { border: 1pt solid #f5c6cb; padding: 8pt; background: #FFF5F5; font-size: 9pt; line-height: 1.5; }
-    .achado-box { border: 0.5pt solid #ccc; padding: 5pt; margin-bottom: 5pt; background: #FDFAE7; }
-    .badge-nao_conforme { color: #721c24; font-weight: bold; }
-    .badge-conforme { color: #155724; font-weight: bold; }
-    .badge-ressalvas, .badge-conforme_ressalvas { color: #856404; font-weight: bold; }
-    .badge-indeterminado { color: #555; }
-    #footer_content { font-size: 6.5pt; color: #888; text-align: center; border-top: 0.5pt solid #ccc; padding-top: 2pt; }
+/* ──────────────────────────────────────────────────────────────────────────
+   NOTA TÉCNICA DE AUDITORIA PREVIDENCIÁRIA — RPPS
+   Visual baseado no modelo VPA Soluções Atuariais
+   Cores: #4A5568 (dark) · #2C7A7B (teal) · #EDF2F7 (gray) · #E6FFFA (green)
+   ────────────────────────────────────────────────────────────────────────── */
+
+@page {
+    size: A4 portrait;
+    margin: 1cm 1.5cm 1.8cm 1.5cm;
+}
+
+.page-break { page-break-before: always; break-before: page; }
+.page-num::after { content: counter(page); }
+
+body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 9.5pt;
+    color: #2D3748;
+    line-height: 1.45;
+    margin: 0;
+    padding: 0 0 1.2cm 0;
+}
+
+.fw { margin-left: -1.5cm; margin-right: -1.5cm; }
+
+/* CABEÇALHO */
+.page-header { background: #1A202C; color: white; padding: 9pt 1.5cm 8pt 1.5cm; }
+.page-header table { width: 100%; border-collapse: collapse; }
+.page-header td { border: none; padding: 0; background: transparent; vertical-align: bottom; }
+.header-logo img { max-height: 26pt; max-width: 80pt; display: block; }
+.header-company { font-size: 10pt; font-weight: bold; color: #fff; letter-spacing: 0.5pt; }
+.header-subtitle { font-size: 7.5pt; color: rgba(255,255,255,0.72); margin-top: 3pt; }
+.header-pag { font-size: 7.5pt; color: rgba(255,255,255,0.72); text-align: right; vertical-align: top; }
+
+.accent-line { background: #2C7A7B; height: 5pt; margin: 0 -1.5cm; }
+
+/* BLOCO DE TÍTULO */
+.title-block {
+    background: #1A202C;
+    border-left: 5pt solid #2C7A7B;
+    color: white;
+    padding: 20pt 16pt 18pt 22pt;
+    margin-top: 16pt;
+}
+.doc-title { font-size: 15pt; font-weight: bold; margin: 0; letter-spacing: 0.7pt; text-transform: uppercase; }
+.doc-subtitle { font-size: 9.5pt; color: rgba(255,255,255,0.78); margin: 5pt 0 0 0; }
+
+/* RESULTADO FINAL */
+.result-box { width: 100%; border-collapse: collapse; margin: 16pt 0 20pt 0; }
+.result-label-cell {
+    background: #EDF2F7;
+    color: #2D3748;
+    font-size: 8.5pt;
+    font-weight: bold;
+    letter-spacing: 0.5pt;
+    text-transform: uppercase;
+    padding: 16pt 18pt;
+    width: 35%;
+    vertical-align: middle;
+    border-left: 5pt solid #718096;
+}
+.result-value-cell {
+    font-size: 15pt;
+    font-weight: bold;
+    padding: 16pt 18pt;
+    vertical-align: middle;
+    color: white;
+    letter-spacing: 0.3pt;
+}
+.res-conforme     { background: #276749; }
+.res-nao_conforme { background: #9B2C2C; }
+.res-ressalvas    { background: #C05621; }
+.res-indeterminado{ background: #718096; }
+
+/* SEÇÕES */
+.section-hdr {
+    background: #1A202C;
+    color: white;
+    font-size: 9.5pt;
+    font-weight: bold;
+    padding: 7pt 12pt 7pt 16pt;
+    margin: 14pt 0 6pt 0;
+    border-left: 5pt solid #2C7A7B;
+    letter-spacing: 0.4pt;
+    page-break-after: avoid;
+    break-after: avoid;
+}
+.sub-hdr {
+    background: #EBF8FF;
+    color: #2C5282;
+    font-size: 8.5pt;
+    font-weight: bold;
+    padding: 5pt 10pt 5pt 12pt;
+    margin: 9pt 0 0 0;
+    border-left: 3pt solid #3182CE;
+    page-break-after: avoid;
+    break-after: avoid;
+}
+.sub-section { page-break-inside: avoid; break-inside: avoid; }
+
+/* CABEÇALHO DAS TABELAS */
+.table-hdr-row { background: #2D3748; }
+.table-hdr-row td {
+    font-size: 8pt;
+    font-weight: bold;
+    color: white;
+    padding: 6pt 10pt;
+    border: none;
+    letter-spacing: 0.3pt;
+    text-transform: uppercase;
+    background: #2D3748;
+}
+
+/* TABELA DE IDENTIFICAÇÃO */
+.meta-odd td  { background: #F7FAFC; }
+.meta-even td { background: #ffffff; }
+.meta-table { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+.meta-table td { font-size: 9pt; padding: 6pt 10pt; border: none; border-bottom: 1pt solid #EDF2F7; vertical-align: top; line-height: 1.45; }
+.meta-table tr { page-break-inside: avoid; break-inside: avoid; }
+.ml { font-weight: bold; color: #2D3748; }
+
+/* IDENTIFICAÇÃO — PÁGINA 1 (ESPAÇAMENTO GENEROSO) */
+.meta-table-p1 td { font-size: 10.5pt; padding: 15pt 14pt; border-bottom: 2pt solid #CBD5E0; vertical-align: middle; line-height: 1.5; }
+.meta-table-p1 .ml { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.5pt; color: #718096; font-weight: bold; vertical-align: middle; }
+
+/* TABELA DE VERIFICAÇÃO */
+.ck-odd td  { background: #F0FFF4; }
+.ck-even td { background: #ffffff; }
+.check-table { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+.check-table td { font-size: 8.5pt; padding: 6pt 10pt; border: none; border-bottom: 1pt solid #EDF2F7; vertical-align: top; line-height: 1.45; }
+.check-table tr { page-break-inside: avoid; break-inside: avoid; }
+.status-ok   { font-weight: bold; color: #276749; }
+.status-nok  { font-weight: bold; color: #9B2C2C; }
+.status-dash { color: #A0AEC0; }
+
+/* ANÁLISE TÉCNICA */
+.analise-table { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+.analise-table td { font-size: 9pt; padding: 7pt 10pt; border: none; border-bottom: 1pt solid #EDF2F7; vertical-align: top; line-height: 1.55; }
+.analise-table tr { page-break-inside: avoid; break-inside: avoid; }
+.an-odd td  { background: #F7FAFC; }
+.an-even td { background: #ffffff; }
+.an-label { font-weight: bold; color: #2C7A7B; width: 18%; white-space: nowrap; }
+
+/* CONCLUSÃO */
+.conclusao {
+    background: #F0FFF4;
+    border-left: 4pt solid #2C7A7B;
+    padding: 10pt 12pt;
+    font-size: 9pt;
+    line-height: 1.6;
+    text-align: justify;
+    margin-top: 8pt;
+}
+
+/* OBSERVAÇÕES — seção 2 (colunas de obs nas check-tables e campo livre) */
+.check-table tr td:nth-child(3) { text-align: justify; }
+
+/* ACHADOS, OBSERVAÇÕES, LIMITAÇÕES */
+.achado-box {
+    background: #FFFBEB;
+    border-left: 4pt solid #D69E2E;
+    padding: 7pt 10pt;
+    margin-bottom: 6pt;
+    font-size: 8.5pt;
+    line-height: 1.45;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
+.obs-box {
+    background: #F7FAFC;
+    border-left: 4pt solid #4A5568;
+    padding: 8pt 12pt;
+    font-size: 9pt;
+    line-height: 1.5;
+    margin: 6pt 0;
+}
+.limit-box {
+    background: #FFF5F5;
+    border-left: 4pt solid #9B2C2C;
+    padding: 8pt 12pt;
+    font-size: 8.5pt;
+    line-height: 1.5;
+    margin: 6pt 0;
+}
+
+/* BADGES */
+.badge-conforme { color: #276749; font-weight: bold; }
+.badge-nao_conforme { color: #9B2C2C; font-weight: bold; }
+.badge-ressalvas, .badge-conforme_ressalvas { color: #744210; font-weight: bold; }
+.badge-indeterminado { color: #718096; }
+
+/* ASSINATURA */
+.assinatura { text-align: center; margin-top: 30pt; font-size: 9pt; color: #4A5568; }
+
+/* RODAPÉ */
+#footer_content {
+    position: fixed;
+    bottom: 0.3cm;
+    left: 0;
+    right: 0;
+    font-size: 7pt;
+    color: #4A5568;
+    padding: 2pt 1.5cm 0 1.5cm;
+    border-top: 2pt solid #2C7A7B;
+}
 </style>
 </head>
 <body>
 
+<!-- ── Rodapé (declarado antes para o frame funcionar) ───────────────────── -->
 <div id="footer_content">
-    Nota Técnica — Processo {{ processo.numero }} · RPPS Barra Mansa · Gerado em {{ data_geracao }} · Página <pdf:pagenumber> de <pdf:pagecount>
+    <table style="width:100%;border:none;border-collapse:collapse;">
+        <tr>
+            <td style="border:none;padding:0;font-size:7pt;color:#4A5568;">
+                Nota Técnica &mdash; Processo {{ processo.numero }} &mdash;
+                {% if processo.instituto %}{{ processo.instituto.nome }}{% else %}RPPS{% endif %}
+                &mdash; Gerado em {{ data_geracao }}
+            </td>
+            <td style="border:none;padding:0;text-align:right;font-size:7pt;font-weight:bold;color:#4A5568;">
+                CONFIDENCIAL
+            </td>
+        </tr>
+    </table>
 </div>
 
-<!-- Cabeçalho -->
-<div class="header">
-    <div style="font-size:7.5pt;color:#555;letter-spacing:1pt;text-transform:uppercase;">Auditoria Técnica Previdenciária — {% if processo.instituto %}{{ processo.instituto.nome }}{% else %}RPPS{% endif %}</div>
-    <h1>NOTA TÉCNICA DE AUDITORIA</h1>
-    <div class="subtitle">Processo: {{ processo.numero }} — {{ processo.beneficiario.nome }}</div>
+<!-- ══════════════════════════════════════════════════════════════════════
+     CABEÇALHO — banda full-width (dark #4A5568)
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header fw">
+    <table>
+        <tr>
+            <td>
+                {% if logo_base64 %}
+                <div class="header-logo"><img src="{{ logo_base64 }}" alt="{{ empresa_auditora.nome }}"></div>
+                {% elif empresa_auditora %}
+                <div class="header-company">{{ empresa_auditora.nome }}</div>
+                {% endif %}
+                <div class="header-subtitle">
+                    Análise de Conformidade Previdenciária &mdash;
+                    {% if processo.instituto %}{{ processo.instituto.nome }}{% else %}RPPS{% endif %}
+                </div>
+            </td>
+            <td class="header-pag">Pág. <span class="page-num"></span></td>
+        </tr>
+    </table>
+</div>
+<div class="accent-line"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     BLOCO DE TÍTULO
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="title-block">
+    <div class="doc-title">NOTA TÉCNICA DE AUDITORIA PREVIDENCIÁRIA</div>
+    <div class="doc-subtitle">Processo {{ processo.numero }} &mdash; {{ processo.beneficiario.nome|upper }}</div>
 </div>
 
-<!-- Identificação do processo -->
-<h2>1. Identificação do Processo</h2>
-<table class="meta-table">
-    <tr><td>Número do Processo</td><td>{{ processo.numero }}</td></tr>
-    <tr><td>Beneficiário</td><td>{{ processo.beneficiario.nome }}</td></tr>
-    <tr><td>CPF</td><td>{{ processo.beneficiario.cpf }}</td></tr>
-    <tr><td>Matrícula</td><td>{{ processo.beneficiario.matricula|default:"—" }}</td></tr>
-    <tr><td>Cargo / Carreira</td><td>{{ processo.beneficiario.cargo|default:"—" }}{% if processo.beneficiario.carreira %} / {{ processo.beneficiario.carreira }}{% endif %}</td></tr>
-    <tr><td>Tipo de Benefício</td><td>{{ processo.get_tipo_beneficio_display }}</td></tr>
-    <tr><td>Data de Concessão</td><td>{% if processo.data_concessao %}{{ processo.data_concessao|date:"d/m/Y" }}{% else %}—{% endif %}</td></tr>
-    <tr><td>Instituto RPPS</td><td>{% if processo.instituto %}{{ processo.instituto }}{% else %}—{% endif %}</td></tr>
-    <tr><td>Lote</td><td>{% if processo.lote %}{{ processo.lote.numero }}{% else %}—{% endif %}</td></tr>
-    <tr><td>Data da Nota Técnica</td><td>{{ data_geracao }}</td></tr>
-    {% if nota and nota.auditor %}<tr><td>Auditor Responsável</td><td>{{ nota.auditor }}</td></tr>{% endif %}
-</table>
-
-<!-- Resultado da análise -->
-<h2>2. Resultado da Análise</h2>
-
+<!-- ══════════════════════════════════════════════════════════════════════
+     BOX DE RESULTADO FINAL
+     ══════════════════════════════════════════════════════════════════════ -->
 {% with resultado=processo.get_resultado_analise %}
-<table class="meta-table" style="margin-bottom:10pt;">
+<table class="result-box">
     <tr>
-        <td style="width:35%">Resultado Final do Processo</td>
-        <td>
-            <strong class="badge-{{ resultado|lower|default:'indeterminado' }}">
-                {% if resultado == 'CONFORME' %}CONFORME
-                {% elif resultado == 'NAO_CONFORME' %}NÃO CONFORME
-                {% elif resultado == 'RESSALVAS' %}CONFORME COM RESSALVAS
-                {% else %}INDETERMINADO{% endif %}
-            </strong>
+        <td class="result-label-cell">RESULTADO FINAL</td>
+        <td class="result-value-cell res-{{ resultado|lower|default:'indeterminado' }}">
+            {% if resultado == 'CONFORME' %}&#10004; CONFORME
+            {% elif resultado == 'NAO_CONFORME' %}&#10008; NÃO CONFORME
+            {% elif resultado == 'RESSALVAS' %}&#9888; CONFORME COM RESSALVAS
+            {% else %}&#8212; INDETERMINADO{% endif %}
         </td>
     </tr>
 </table>
 {% endwith %}
 
-<!-- 2.1 Elegibilidade -->
+<!-- ══════════════════════════════════════════════════════════════════════
+     1. IDENTIFICAÇÃO DO PROCESSO
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="section-hdr">1. IDENTIFICAÇÃO DO PROCESSO</div>
+<table class="meta-table meta-table-p1">
+    <tr class="meta-odd">
+        <td class="ml" style="width:17%">Número do Processo</td>
+        <td style="width:30%">{{ processo.numero }}</td>
+        <td class="ml" style="width:14%">Lote</td>
+        <td>{% if processo.lote %}{{ processo.lote.numero }}{% else %}—{% endif %}</td>
+    </tr>
+    <tr class="meta-even">
+        <td class="ml">Beneficiário</td>
+        <td colspan="3">{{ processo.beneficiario.nome|upper }}</td>
+    </tr>
+    <tr class="meta-odd">
+        <td class="ml">CPF</td>
+        <td>{{ processo.beneficiario.cpf }}</td>
+        <td class="ml">Matrícula</td>
+        <td>{{ processo.beneficiario.matricula|default:"—" }}</td>
+    </tr>
+    <tr class="meta-even">
+        <td class="ml">Data da Nota</td>
+        <td>{{ data_geracao }}</td>
+        <td class="ml">Data de Concessão</td>
+        <td>{% if processo.data_concessao %}{{ processo.data_concessao|date:"d/m/Y" }}{% else %}—{% endif %}</td>
+    </tr>
+    <tr class="meta-odd">
+        <td class="ml">Cargo / Carreira</td>
+        <td>{{ processo.beneficiario.cargo|default:"—" }}{% if processo.beneficiario.carreira %} / {{ processo.beneficiario.carreira }}{% endif %}</td>
+        <td class="ml">Tipo de Benefício</td>
+        <td>{{ processo.get_tipo_beneficio_display }}</td>
+    </tr>
+    <tr class="meta-even">
+        <td class="ml">Instituto RPPS</td>
+        <td colspan="3">{% if processo.instituto %}{{ processo.instituto }}{% else %}—{% endif %}</td>
+    </tr>
+    {% if nota and nota.auditor %}
+    <tr class="meta-odd">
+        <td class="ml">Auditor Responsável</td>
+        <td colspan="3">{{ nota.auditor }}</td>
+    </tr>
+    {% endif %}
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     2. RESULTADO DA ANÁLISE
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="page-break"></div>
+<div class="section-hdr">2. RESULTADO DA ANÁLISE</div>
+
 {% if elegibilidade %}
-<div style="font-size:8.5pt;font-weight:bold;color:#1A3A5C;margin:6pt 0 2pt 0;">
-    2.1 Elegibilidade —
+<div class="sub-section">
+<!-- 2.1 Elegibilidade -->
+<div class="sub-hdr">
+    2.1 Elegibilidade &nbsp;&mdash;&nbsp;
     <span class="badge-{{ elegibilidade.resultado|lower }}">{{ elegibilidade.get_resultado_display }}</span>
 </div>
 <table class="check-table">
-    <thead>
-        <tr>
-            <th style="width:30%">Item Verificado</th>
-            <th style="width:12%">Resultado</th>
-            <th>Observações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% with e=elegibilidade %}
-        <tr>
-            <td>Enquadramento no tipo de benefício</td>
-            <td>{% if e.enquadramento_correto is True %}<span class="ok">CONFORME</span>{% elif e.enquadramento_correto is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.enquadramento_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Requisitos de idade</td>
-            <td>{% if e.requisitos_idade is True %}<span class="ok">CONFORME</span>{% elif e.requisitos_idade is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.requisitos_idade_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Tempo de contribuição</td>
-            <td>{% if e.tempo_contribuicao_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_contribuicao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.tempo_contribuicao_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Tempo de serviço público</td>
-            <td>{% if e.tempo_servico_publico_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_servico_publico_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.tempo_servico_publico_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Normas vigentes à época</td>
-            <td>{% if e.normas_vigentes_epoca_ok is True %}<span class="ok">CONFORME</span>{% elif e.normas_vigentes_epoca_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.normas_vigentes_epoca_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Carreira e cargo verificados</td>
-            <td>{% if e.carreira_cargo_ok is True %}<span class="ok">CONFORME</span>{% elif e.carreira_cargo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.carreira_cargo_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Tempo de carreira</td>
-            <td>{% if e.tempo_carreira_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_carreira_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.tempo_carreira_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Tempo no cargo</td>
-            <td>{% if e.tempo_no_cargo_ok is True %}<span class="ok">CONFORME</span>{% elif e.tempo_no_cargo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.tempo_no_cargo_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Marco temporal de ingresso</td>
-            <td>{% if e.marco_temporal_ok is True %}<span class="ok">CONFORME</span>{% elif e.marco_temporal_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.marco_temporal_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Condição de dependente</td>
-            <td>{% if e.condicao_dependente_ok is True %}<span class="ok">CONFORME</span>{% elif e.condicao_dependente_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ e.condicao_dependente_obs|default:"—" }}</td>
-        </tr>
-        {% endwith %}
-    </tbody>
+    <tr class="table-hdr-row">
+        <td style="width:33%">Item Verificado</td>
+        <td style="width:14%">Resultado</td>
+        <td>Observações</td>
+    </tr>
+    {% with e=elegibilidade %}
+    <tr class="ck-odd"><td>Enquadramento no tipo de benefício</td>
+        <td>{% if e.enquadramento_correto is True %}<span class="status-ok">CONFORME</span>{% elif e.enquadramento_correto is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.enquadramento_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Requisitos de idade</td>
+        <td>{% if e.requisitos_idade is True %}<span class="status-ok">CONFORME</span>{% elif e.requisitos_idade is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.requisitos_idade_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Tempo de contribuição</td>
+        <td>{% if e.tempo_contribuicao_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.tempo_contribuicao_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.tempo_contribuicao_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Tempo de serviço público</td>
+        <td>{% if e.tempo_servico_publico_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.tempo_servico_publico_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.tempo_servico_publico_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Normas vigentes à época</td>
+        <td>{% if e.normas_vigentes_epoca_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.normas_vigentes_epoca_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.normas_vigentes_epoca_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Carreira e cargo verificados</td>
+        <td>{% if e.carreira_cargo_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.carreira_cargo_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.carreira_cargo_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Tempo de carreira</td>
+        <td>{% if e.tempo_carreira_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.tempo_carreira_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.tempo_carreira_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Tempo no cargo</td>
+        <td>{% if e.tempo_no_cargo_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.tempo_no_cargo_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.tempo_no_cargo_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Marco temporal de ingresso</td>
+        <td>{% if e.marco_temporal_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.marco_temporal_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.marco_temporal_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Condição de dependente</td>
+        <td>{% if e.condicao_dependente_ok is True %}<span class="status-ok">CONFORME</span>{% elif e.condicao_dependente_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ e.condicao_dependente_obs|default:"—" }}</td></tr>
+    {% endwith %}
 </table>
+</div>
 {% endif %}
 
-<!-- 2.2 Conformidade de Cálculo -->
 {% if calculo %}
 {% with c=calculo regime=dados_beneficio.regime_reajuste tipo=processo.tipo_beneficio %}
-<div style="font-size:8.5pt;font-weight:bold;color:#1A3A5C;margin:8pt 0 2pt 0;">
-    2.2 Conformidade de Cálculo —
+<div class="sub-section">
+<!-- 2.2 Conformidade de Cálculo -->
+<div class="sub-hdr">
+    2.2 Conformidade de Cálculo &nbsp;&mdash;&nbsp;
     <span class="badge-{{ c.resultado|lower }}">{{ c.get_resultado_display }}</span>
 </div>
 <table class="check-table">
-    <thead>
-        <tr>
-            <th style="width:30%">Item Verificado</th>
-            <th style="width:12%">Resultado</th>
-            <th>Observações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {# Pensão por morte #}
-        {% if tipo == 'PENSAO_MORTE' %}
-        <tr>
-            <td>Base de cálculo{% if c.situacao_instituidor_pensao == 'APOSENTADO' %} — último contracheque do aposentado{% elif c.situacao_instituidor_pensao == 'EM_ATIVIDADE' %} — última remuneração do servidor em atividade{% endif %}</td>
-            <td>{% if c.base_calculo_ok is True %}<span class="ok">CONFORME</span>{% elif c.base_calculo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.base_calculo_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Reajuste aplicado</td>
-            <td>{% if c.reajuste_ok is True %}<span class="ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.reajuste_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Teto remuneratório / acumulação</td>
-            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
-        </tr>
-
-        {# Regime MÉDIA — reajuste pelo índice INSS #}
-        {% elif regime == 'MEDIA' %}
-        <tr>
-            <td>Média / integralidade calculada corretamente</td>
-            <td>{% if c.media_integralidade_ok is True %}<span class="ok">CONFORME</span>{% elif c.media_integralidade_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.media_integralidade_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Reajuste aplicado — índice INSS (Portaria MPS/MF)</td>
-            <td>{% if c.reajuste_ok is True %}<span class="ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.reajuste_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Teto remuneratório / acumulação</td>
-            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
-        </tr>
-
-        {# Regime PARIDADE — reajuste acompanha cargo ativo #}
-        {% elif regime == 'PARIDADE' %}
-        <tr>
-            <td>Composição da remuneração correta (paridade com cargo ativo)</td>
-            <td>{% if c.composicao_remuneracao_ok is True %}<span class="ok">CONFORME</span>{% elif c.composicao_remuneracao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.composicao_remuneracao_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Teto remuneratório / acumulação</td>
-            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
-        </tr>
-
-        {# Regime não definido — exibe todos os itens relevantes #}
-        {% else %}
-        <tr>
-            <td>Base de cálculo</td>
-            <td>{% if c.base_calculo_ok is True %}<span class="ok">CONFORME</span>{% elif c.base_calculo_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.base_calculo_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Composição da remuneração</td>
-            <td>{% if c.composicao_remuneracao_ok is True %}<span class="ok">CONFORME</span>{% elif c.composicao_remuneracao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.composicao_remuneracao_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Média / integralidade</td>
-            <td>{% if c.media_integralidade_ok is True %}<span class="ok">CONFORME</span>{% elif c.media_integralidade_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.media_integralidade_obs|default:"—" }}</td>
-        </tr>
-        <tr class="even">
-            <td>Reajuste aplicado</td>
-            <td>{% if c.reajuste_ok is True %}<span class="ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.reajuste_obs|default:"—" }}</td>
-        </tr>
-        <tr>
-            <td>Teto remuneratório / acumulação</td>
-            <td>{% if c.teto_acumulacao_ok is True %}<span class="ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="nok">NÃO CONFORME</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">{{ c.teto_acumulacao_obs|default:"—" }}</td>
-        </tr>
-        {% endif %}
-
-        {# Método de reajuste aplicado (quando preenchido manualmente) #}
-        {% if c.metodo_reajuste_aplicado %}
-        <tr class="even">
-            <td>Método de reajuste aplicado</td>
-            <td>{% if c.regime_compativel is True %}<span class="ok">CONFORME</span>{% elif c.regime_compativel is False %}<span class="nok">INCOMPATÍVEL</span>{% else %}<span style="color:#888">—</span>{% endif %}</td>
-            <td style="font-size:7.5pt">
-                {{ c.get_metodo_reajuste_aplicado_display|default:c.metodo_reajuste_aplicado }}
-                {% if c.lei_municipal_aplicada %} — {{ c.lei_municipal_aplicada }}{% endif %}
-                {% if c.indice_inss_aplicado %} — Índice: {{ c.indice_inss_aplicado }}%{% endif %}
-                {% if c.regime_compativel_obs %} — {{ c.regime_compativel_obs }}{% endif %}
-            </td>
-        </tr>
-        {% endif %}
-    </tbody>
+    <tr class="table-hdr-row">
+        <td style="width:33%">Item Verificado</td>
+        <td style="width:14%">Resultado</td>
+        <td>Observações</td>
+    </tr>
+    {% if tipo == 'PENSAO_MORTE' %}
+    <tr class="ck-odd"><td>Base de cálculo{% if c.situacao_instituidor_pensao == 'APOSENTADO' %} — último contracheque do aposentado{% elif c.situacao_instituidor_pensao == 'EM_ATIVIDADE' %} — última remuneração em atividade{% endif %}</td>
+        <td>{% if c.base_calculo_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.base_calculo_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.base_calculo_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Reajuste aplicado</td>
+        <td>{% if c.reajuste_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.reajuste_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Teto remuneratório / acumulação</td>
+        <td>{% if c.teto_acumulacao_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.teto_acumulacao_obs|default:"—" }}</td></tr>
+    {% elif regime == 'MEDIA' %}
+    <tr class="ck-odd"><td>Média / integralidade calculada corretamente</td>
+        <td>{% if c.media_integralidade_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.media_integralidade_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.media_integralidade_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Reajuste aplicado — índice INSS (Portaria MPS/MF)</td>
+        <td>{% if c.reajuste_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.reajuste_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Teto remuneratório / acumulação</td>
+        <td>{% if c.teto_acumulacao_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.teto_acumulacao_obs|default:"—" }}</td></tr>
+    {% elif regime == 'PARIDADE' %}
+    <tr class="ck-odd"><td>Composição da remuneração correta (paridade com cargo ativo)</td>
+        <td>{% if c.composicao_remuneracao_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.composicao_remuneracao_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.composicao_remuneracao_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Teto remuneratório / acumulação</td>
+        <td>{% if c.teto_acumulacao_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.teto_acumulacao_obs|default:"—" }}</td></tr>
+    {% else %}
+    <tr class="ck-odd"><td>Base de cálculo</td>
+        <td>{% if c.base_calculo_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.base_calculo_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.base_calculo_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Composição da remuneração</td>
+        <td>{% if c.composicao_remuneracao_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.composicao_remuneracao_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.composicao_remuneracao_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Média / integralidade</td>
+        <td>{% if c.media_integralidade_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.media_integralidade_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.media_integralidade_obs|default:"—" }}</td></tr>
+    <tr class="ck-even"><td>Reajuste aplicado</td>
+        <td>{% if c.reajuste_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.reajuste_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.reajuste_obs|default:"—" }}</td></tr>
+    <tr class="ck-odd"><td>Teto remuneratório / acumulação</td>
+        <td>{% if c.teto_acumulacao_ok is True %}<span class="status-ok">CONFORME</span>{% elif c.teto_acumulacao_ok is False %}<span class="status-nok">NÃO CONFORME</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.teto_acumulacao_obs|default:"—" }}</td></tr>
+    {% endif %}
+    {% if c.metodo_reajuste_aplicado %}
+    <tr class="ck-even"><td>Método de reajuste aplicado</td>
+        <td>{% if c.regime_compativel is True %}<span class="status-ok">CONFORME</span>{% elif c.regime_compativel is False %}<span class="status-nok">INCOMPATÍVEL</span>{% else %}<span class="status-dash">—</span>{% endif %}</td>
+        <td>{{ c.get_metodo_reajuste_aplicado_display|default:c.metodo_reajuste_aplicado }}{% if c.lei_municipal_aplicada %} — {{ c.lei_municipal_aplicada }}{% endif %}{% if c.indice_inss_aplicado %} — Índice: {{ c.indice_inss_aplicado }}%{% endif %}{% if c.regime_compativel_obs %} — {{ c.regime_compativel_obs }}{% endif %}</td></tr>
+    {% endif %}
 </table>
+</div>
 {% endwith %}
 {% endif %}
 
-<!-- 2.3 Conferência de Folha -->
 {% if folha %}
-<div style="font-size:8.5pt;font-weight:bold;color:#1A3A5C;margin:8pt 0 2pt 0;">
-    2.3 Conferência de Folha —
+<div class="sub-section">
+<!-- 2.3 Conferência de Folha -->
+<div class="sub-hdr">
+    2.3 Conferência de Folha &nbsp;&mdash;&nbsp;
     <span class="badge-{{ folha.resultado|lower }}">{{ folha.get_resultado_display }}</span>
 </div>
-<table class="meta-table" style="margin-bottom:4pt;">
+<table class="meta-table">
     {% if dados_beneficio %}
-    <tr>
-        <td>Regime de Reajuste</td>
-        <td>{{ dados_beneficio.get_regime_reajuste_display|default:"—" }}</td>
-    </tr>
+    <tr class="meta-odd"><td class="ml" style="width:31%">Regime de Reajuste</td><td>{{ dados_beneficio.get_regime_reajuste_display|default:"—" }}</td></tr>
     {% endif %}
-    <tr>
-        <td>Valor na Concessão</td>
-        <td>{% if folha.valor_concedido %}R$ {{ folha.valor_concedido }}{% if processo.data_concessao %} ({{ processo.data_concessao|date:"d/m/Y" }}){% endif %}{% else %}—{% endif %}</td>
-    </tr>
-    <tr>
-        <td>Valor Esperado (com reajuste)</td>
-        <td>
-            {% if valor_esperado %}
-                <strong>R$ {{ valor_esperado }}</strong>
-                {% if passos_reajuste %}
-                — {% for p in passos_reajuste %}{% if dados_beneficio.regime_reajuste == 'PARIDADE' %}Lei {{ p.lei }} ({{ p.vigencia }}, +{{ p.percentual }}%){% else %}INSS {{ p.ano }} ({{ p.vigencia }}, +{{ p.percentual }}%){% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}
-                {% endif %}
-            {% else %}—{% endif %}
-        </td>
-    </tr>
-    <tr>
-        <td>Valor Pago na Folha</td>
-        <td>{% if folha.valor_pago_folha %}R$ {{ folha.valor_pago_folha }}{% else %}—{% endif %}</td>
-    </tr>
-    <tr>
-        <td>Divergência Apurada</td>
-        <td>
-            {% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}
-                <span class="ok">SEM DIVERGÊNCIA</span>
-            {% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}
-                <span class="nok">PAGAMENTO MAIOR — R$ {{ folha.impacto_financeiro_estimado }} acima do esperado</span>
-            {% elif folha.tipo_divergencia == 'PAGAMENTO_MENOR' %}
-                <span class="nok">PAGAMENTO MENOR — R$ {{ folha.impacto_financeiro_estimado }} abaixo do esperado</span>
-            {% else %}—{% endif %}
-        </td>
-    </tr>
+    <tr class="meta-even"><td class="ml">Valor na Concessão</td>
+        <td>{% if folha.valor_concedido %}<strong>R$ {{ folha.valor_concedido }}</strong>{% if processo.data_concessao %} ({{ processo.data_concessao|date:"d/m/Y" }}){% endif %}{% else %}—{% endif %}</td></tr>
+    <tr class="meta-odd"><td class="ml">Valor Esperado (com reajuste)</td>
+        <td>{% if valor_esperado %}<strong>R$ {{ valor_esperado }}</strong>{% if passos_reajuste %} &mdash; {% for p in passos_reajuste %}{% if dados_beneficio.regime_reajuste == 'PARIDADE' %}Lei {{ p.lei }} ({{ p.vigencia }}, +{{ p.percentual }}%){% else %}INSS {{ p.ano }} ({{ p.vigencia }}, +{{ p.percentual }}%){% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}{% endif %}{% else %}—{% endif %}</td></tr>
+    <tr class="meta-even"><td class="ml">Valor Pago na Folha</td>
+        <td>{% if folha.valor_pago_folha %}<strong>R$ {{ folha.valor_pago_folha }}</strong>{% else %}—{% endif %}</td></tr>
+    <tr class="meta-odd"><td class="ml">Divergência Apurada</td>
+        <td>{% if folha.tipo_divergencia == 'SEM_DIVERGENCIA' %}<span class="status-ok">SEM DIVERGÊNCIA</span>
+            {% elif folha.tipo_divergencia == 'COM_DIVERGENCIAS' %}<span class="status-nok">COM DIVERGÊNCIAS (maior e menor)</span>
+            {% elif folha.tipo_divergencia == 'PAGAMENTO_MAIOR' %}<span class="status-nok">PAGAMENTO A MAIOR</span>
+            {% elif folha.tipo_divergencia == 'PAGAMENTO_MENOR' %}<span class="status-nok">PAGAMENTO A MENOR</span>
+            {% else %}—{% endif %}</td></tr>
     {% if folha.observacoes %}
-    <tr>
-        <td>Observações do Auditor</td>
-        <td style="font-size:8pt;">{{ folha.observacoes }}</td>
-    </tr>
+    <tr class="meta-even"><td class="ml">Observações do Auditor</td><td style="text-align:justify">{{ folha.observacoes }}</td></tr>
     {% endif %}
 </table>
-{% endif %}
-
-<!-- Análise técnica automática -->
-<h2>3. Análise Técnica</h2>
-{% if analise_automatica %}
-<div class="texto-nota">
-    {% for paragrafo in analise_automatica %}
-    <p style="margin-bottom:6pt; text-align:justify;">{{ paragrafo }}</p>
+{% if divergencias_folha %}
+<div style="font-size:8pt;font-weight:bold;color:#4A5568;margin:4pt 0 2pt 0;">Divergências Identificadas</div>
+<table class="check-table">
+    <tr class="table-hdr-row">
+        <td style="width:26%">Tipo</td><td>Descrição</td>
+        <td style="width:18%">Base Legal</td>
+        <td style="width:10%;text-align:right">Valor (R$)</td>
+        <td style="width:10%;text-align:center">Impacto</td>
+    </tr>
+    {% for div in divergencias_folha %}
+    <tr class="{% if forloop.counter|divisibleby:2 %}ck-even{% else %}ck-odd{% endif %}">
+        <td style="font-weight:bold">{{ div.get_tipo_display }}</td>
+        <td>{{ div.descricao|default:"—" }}</td>
+        <td style="color:#555">{{ div.base_legal|default:"—" }}</td>
+        <td style="text-align:right;font-weight:bold">{{ div.valor }}</td>
+        <td style="text-align:center">{% if div.impacto == 'MAIOR' %}<span style="color:#744210">▲ A maior</span>{% else %}<span class="status-nok">▼ A menor</span>{% endif %}</td>
+    </tr>
     {% endfor %}
-</div>
-{% else %}
-<div class="texto-nota">
-    <span style="color:#aaa;font-style:italic;">Análise técnica não disponível — preencha as abas de Elegibilidade, Cálculo e Conferência de Folha.</span>
+</table>
+{% endif %}
 </div>
 {% endif %}
 
-<!-- Achados -->
+<!-- ══════════════════════════════════════════════════════════════════════
+     3. ANÁLISE TÉCNICA
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="page-break"></div>
+<div class="section-hdr">3. ANÁLISE TÉCNICA</div>
+{% if analise_automatica %}
+<table class="analise-table">
+    {% for paragrafo in analise_automatica %}
+    <tr class="{% if forloop.counter|divisibleby:2 %}an-even{% else %}an-odd{% endif %}">
+        <td class="an-label">
+            {% if forloop.counter == 1 %}Identificação
+            {% elif forloop.counter == 2 %}Elegibilidade
+            {% elif forloop.counter == 3 %}Conformidade de Cálculo
+            {% elif forloop.counter == 4 %}Conferência de Folha
+            {% else %}Complementar{% endif %}
+        </td>
+        <td style="text-align:justify">{{ paragrafo }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% with resultado=processo.get_resultado_analise %}
+<div class="conclusao">
+    Diante do exposto, o processo n.º <strong>{{ processo.numero }}</strong> &mdash;
+    <strong>{{ processo.beneficiario.nome|upper }}</strong> recebe resultado final:
+    <strong>{% if resultado == 'CONFORME' %}CONFORME{% elif resultado == 'NAO_CONFORME' %}NÃO CONFORME{% elif resultado == 'RESSALVAS' %}CONFORME COM RESSALVAS{% else %}INDETERMINADO{% endif %}</strong>.
+</div>
+{% endwith %}
+{% else %}
+<div class="obs-box" style="color:#888;font-style:italic;">
+    Análise técnica não disponível — preencha as abas de Elegibilidade, Cálculo e Conferência de Folha.
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     4. ACHADOS DE AUDITORIA
+     ══════════════════════════════════════════════════════════════════════ -->
 {% if achados %}
-<h2>4. Achados de Auditoria</h2>
+<div class="section-hdr">4. ACHADOS DE AUDITORIA</div>
 {% for achado in achados %}
 <div class="achado-box">
-    <div style="margin-bottom:3pt">
+    <div style="margin-bottom:2pt">
         <span class="badge-{{ achado.classificacao|lower }}">{{ achado.get_classificacao_display }}</span>
-        <span style="font-size:7.5pt;color:#555;margin-left:6pt">{{ achado.data_registro|date:"d/m/Y" }}</span>
+        <span style="font-size:7pt;color:#718096;margin-left:6pt">{{ achado.data_registro|date:"d/m/Y" }}</span>
     </div>
     <div style="margin-bottom:2pt">{{ achado.descricao }}</div>
     {% if achado.normas_aplicaveis %}<div style="font-size:7.5pt;color:#555"><strong>Normas:</strong> {{ achado.normas_aplicaveis }}</div>{% endif %}
-    {% if achado.impacto_financeiro %}<div style="font-size:7.5pt;color:#721c24"><strong>Impacto financeiro estimado:</strong> R$ {{ achado.impacto_financeiro }}</div>{% endif %}
-    {% if achado.recomendacao %}<div style="font-size:7.5pt;color:#155724"><strong>Recomendação:</strong> {{ achado.recomendacao }}</div>{% endif %}
+    {% if achado.impacto_financeiro %}<div style="font-size:7.5pt;color:#9B2C2C"><strong>Impacto financeiro estimado:</strong> R$ {{ achado.impacto_financeiro }}</div>{% endif %}
+    {% if achado.recomendacao %}<div style="font-size:7.5pt;color:#276749"><strong>Recomendação:</strong> {{ achado.recomendacao }}</div>{% endif %}
 </div>
 {% endfor %}
 {% endif %}
 
-<!-- Observações adicionais do auditor -->
 {% if nota and nota.texto %}
-<h2>{% if achados %}5{% else %}4{% endif %}. Observações Adicionais do Auditor</h2>
-<div class="texto-nota">{{ nota.texto|linebreaks }}</div>
+<div class="section-hdr">{% if achados %}5{% else %}4{% endif %}. OBSERVAÇÕES ADICIONAIS DO AUDITOR</div>
+<div class="obs-box">{{ nota.texto|linebreaks }}</div>
 {% endif %}
 
-<!-- Limitações documentais -->
 {% if nota and nota.limitacao_documental %}
-<h2>{% if achados and nota and nota.texto %}6{% elif achados or nota and nota.texto %}5{% else %}4{% endif %}. Limitações Técnicas (cf. Cláusula 12.4)</h2>
-<div class="limitacao">{{ nota.limitacao_documental|linebreaks }}</div>
+<div class="section-hdr">{% if achados and nota and nota.texto %}6{% elif achados or nota and nota.texto %}5{% else %}4{% endif %}. LIMITAÇÕES TÉCNICAS</div>
+<div class="limit-box">{{ nota.limitacao_documental|linebreaks }}</div>
 {% endif %}
 
-<!-- Assinatura -->
-<div style="margin-top:30pt;border-top:0.5pt solid #ccc;padding-top:10pt;text-align:center;font-size:8pt;color:#555;">
-    <div style="margin-bottom:20pt">________________________________________</div>
-    <div style="font-weight:bold;letter-spacing:2pt;">EQUIPE TÉCNICA</div>
+<!-- ══════════════════════════════════════════════════════════════════════
+     ASSINATURA
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="assinatura">
+    <div style="margin-bottom:18pt">______________________________________</div>
+    <div style="font-weight:bold;letter-spacing:2pt;text-transform:uppercase;">Equipe Técnica</div>
+    {% if empresa_auditora %}
+    <div style="margin-top:2pt;font-size:9pt;">{{ empresa_auditora.nome }}</div>
+    {% endif %}
 </div>
 
 </body>

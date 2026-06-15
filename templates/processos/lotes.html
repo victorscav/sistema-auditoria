@@ -18,11 +18,15 @@
 <div class="row g-3">
     {% for lote in lotes %}
     <div class="col-md-6 col-xl-4">
-        <div class="card card-stat">
+        <div class="card card-stat" style="cursor:pointer" onclick="location.href='{% url 'processos:lote_detalhe' lote.pk %}'">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <div>
-                        <h6 class="fw-bold mb-0">{{ lote.numero }}</h6>
+                        <h6 class="fw-bold mb-0">
+                            <a href="{% url 'processos:lote_detalhe' lote.pk %}" class="text-dark text-decoration-none stretched-link">
+                                {{ lote.numero }}
+                            </a>
+                        </h6>
                         <small class="text-muted">{{ lote.descricao|truncatechars:50 }}</small>
                     </div>
                     <span class="badge {% if lote.status == 'ABERTO' %}bg-success{% elif lote.status == 'EM_ANDAMENTO' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
@@ -40,11 +44,9 @@
                 </div>
                 <div class="d-flex justify-content-between align-items-center">
                     <small class="text-muted">{{ lote.processos_concluidos }}/{{ lote.total_processos }} processos</small>
-                    <div class="d-flex gap-1">
-                        <a href="{% url 'processos:lista' %}?lote={{ lote.pk }}" class="btn btn-sm btn-outline-primary py-0">
-                            <i class="bi bi-eye"></i>
-                        </a>
-                        <a href="{% url 'processos:editar_lote' lote.pk %}" class="btn btn-sm btn-outline-secondary py-0">
+                    <div class="d-flex gap-1" style="position:relative;z-index:1">
+                        <a href="{% url 'processos:editar_lote' lote.pk %}" class="btn btn-sm btn-outline-secondary py-0"
+                           onclick="event.stopPropagation()">
                             <i class="bi bi-pencil"></i>
                         </a>
                     </div>

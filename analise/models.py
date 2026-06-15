@@ -207,9 +207,10 @@ class AnaliseCalculo(models.Model):
 
 class ConferenciaFolha(models.Model):
     class TipoDivergencia(models.TextChoices):
-        SEM_DIVERGENCIA = 'SEM_DIVERGENCIA', 'Sem Divergência'
-        PAGAMENTO_MAIOR = 'PAGAMENTO_MAIOR', 'Pagamento Maior que o Concedido'
-        PAGAMENTO_MENOR = 'PAGAMENTO_MENOR', 'Pagamento Menor que o Concedido'
+        SEM_DIVERGENCIA  = 'SEM_DIVERGENCIA',  'Sem Divergência'
+        PAGAMENTO_MAIOR  = 'PAGAMENTO_MAIOR',  'Pagamento Maior que o Concedido'
+        PAGAMENTO_MENOR  = 'PAGAMENTO_MENOR',  'Pagamento Menor que o Concedido'
+        COM_DIVERGENCIAS = 'COM_DIVERGENCIAS', 'Com Divergências (maior e menor)'
 
     processo = models.OneToOneField(Processo, on_delete=models.CASCADE, related_name='conferenciafolha', verbose_name='Processo')
 
@@ -249,9 +250,43 @@ class ConferenciaFolha(models.Model):
 
     @property
     def divergencia_valor(self):
-        if self.valor_pago_folha is not None and self.valor_concedido is not None:
-            return self.valor_pago_folha - self.valor_concedido
+        if self.valor_pago_folha is not None and self.valor_esperado is not None:
+            return self.valor_pago_folha - self.valor_esperado
         return None
+
+
+class DivergenciaFolha(models.Model):
+    class Tipo(models.TextChoices):
+        TRIENIO_MAIOR    = 'TRIENIO_MAIOR',    'Triênio calculado a maior'
+        REAJUSTE_MENOR   = 'REAJUSTE_MENOR',   'Reajuste aplicado a menor'
+        REAJUSTE_MAIOR   = 'REAJUSTE_MAIOR',   'Reajuste aplicado a maior'
+        RUBRICA_INDEVIDA = 'RUBRICA_INDEVIDA', 'Rubrica indevida'
+        OUTRO_MAIOR      = 'OUTRO_MAIOR',      'Pagamento a maior (outro)'
+        OUTRO_MENOR      = 'OUTRO_MENOR',      'Pagamento a menor (outro)'
+
+    class Impacto(models.TextChoices):
+        MAIOR = 'MAIOR', 'Pagamento a maior'
+        MENOR = 'MENOR', 'Pagamento a menor'
+
+    conferencia = models.ForeignKey(
+        ConferenciaFolha, on_delete=models.CASCADE,
+        related_name='divergencias', verbose_name='Conferência'
+    )
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, verbose_name='Tipo')
+    impacto = models.CharField(max_length=5, choices=Impacto.choices, verbose_name='Impacto')
+    valor = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Valor (R$)')
+    descricao = models.TextField(blank=True, verbose_name='Descrição')
+    base_legal = models.TextField(blank=True, verbose_name='Base Legal')
+    detectado_automaticamente = models.BooleanField(default=False)
+    achado_gerado = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Divergência de Folha'
+        verbose_name_plural = 'Divergências de Folha'
+        ordering = ['tipo']
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} — R$ {self.valor}'
 
 
 class AchadoAuditoria(models.Model):

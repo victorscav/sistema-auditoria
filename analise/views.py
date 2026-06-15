@@ -5,11 +5,12 @@ from decimal import Decimal
 
 from processos.models import Processo, ReajusteINSS
 from .models import (
-    AnaliseElegibilidade, AnaliseCalculo, ConferenciaFolha,
+    AnaliseElegibilidade, AnaliseCalculo, ConferenciaFolha, DivergenciaFolha,
     AchadoAuditoria, ResultadoAnalise, NotaTecnica
 )
 from .auto_analise import executar_pre_analise
-from .utils import calcular_valor_esperado, recalcular_conferencia, gerar_analise_tecnica
+from .utils import calcular_valor_esperado, recalcular_conferencia, gerar_analise_tecnica, gerar_achados_de_divergencias
+from institutos.models import EmpresaAuditora
 
 
 def _get_subsidio_prefeito(processo):
@@ -361,6 +362,16 @@ def analise(request, processo_pk):
         ano_ref_contracheque = None
         mes_ref_contracheque = None
 
+    # Análise do triênio via demonstrativo (PARIDADE)
+    analise_trienio = None
+    if contracheque and regime == 'PARIDADE':
+        analise_trienio = contracheque.analisar_trienio_demonstrativo()
+
+    # Divergências da conferência de folha (automáticas + manuais)
+    divergencias_folha = list(folha.divergencias.all()) if folha else []
+    total_divergencia_maior = sum(d.valor for d in divergencias_folha if d.impacto == 'MAIOR')
+    total_divergencia_menor = sum(d.valor for d in divergencias_folha if d.impacto == 'MENOR')
+
     return render(request, 'analise/analise.html', {
         'processo': processo,
         'aba_ativa': aba_ativa,
@@ -394,6 +405,11 @@ def analise(request, processo_pk):
         'valor_esperado': valor_esperado,
         'passos_reajuste': passos_reajuste,
         'eh_media': regime == 'MEDIA',
+        'regime_paridade': regime == 'PARIDADE',
+        'analise_trienio': analise_trienio,
+        'divergencias_folha': divergencias_folha,
+        'total_divergencia_maior': total_divergencia_maior,
+        'total_divergencia_menor': total_divergencia_menor,
         'subsidio_prefeito': _get_subsidio_prefeito(processo),
         'is_procurador': 'procurador' in (processo.beneficiario.cargo or '').lower(),
         'teto_rgps_atual': ReajusteINSS.objects.order_by('-ano').values_list('teto_inss', flat=True).first(),
@@ -407,6 +423,7 @@ def analise(request, processo_pk):
             processo, elegibilidade, calculo, folha, dados_beneficio,
             valor_esperado, passos_reajuste, list(processo.achados.all()),
         ),
+        'empresas': EmpresaAuditora.objects.filter(ativa=True),
     })
 
 
@@ -455,9 +472,108 @@ def excluir_achado(request, pk):
     return redirect(f'/analise/{processo_pk}/?aba=achados')
 
 
+def adicionar_divergencia(request, processo_pk):
+    """POST: adiciona divergência manual à conferência de folha."""
+    if request.method != 'POST':
+        return redirect(f'/analise/{processo_pk}/?aba=folha')
+    processo = get_object_or_404(Processo, pk=processo_pk)
+    folha, _ = ConferenciaFolha.objects.get_or_create(processo=processo)
+    tipo = request.POST.get('tipo', '').strip()
+    impacto = request.POST.get('impacto', '').strip()
+    descricao = request.POST.get('descricao', '').strip()
+    base_legal = request.POST.get('base_legal', '').strip()
+    try:
+        valor = Decimal(request.POST.get('valor', '0').replace(',', '.'))
+    except Exception:
+        messages.error(request, 'Valor inválido.')
+        return redirect(f'/analise/{processo_pk}/?aba=folha')
+    if tipo not in [c[0] for c in DivergenciaFolha.Tipo.choices]:
+        messages.error(request, 'Tipo de divergência inválido.')
+        return redirect(f'/analise/{processo_pk}/?aba=folha')
+    if impacto not in [c[0] for c in DivergenciaFolha.Impacto.choices]:
+        messages.error(request, 'Impacto inválido.')
+        return redirect(f'/analise/{processo_pk}/?aba=folha')
+    DivergenciaFolha.objects.create(
+        conferencia=folha, tipo=tipo, impacto=impacto,
+        valor=valor, descricao=descricao, base_legal=base_legal,
+        detectado_automaticamente=False,
+    )
+    from analise.utils import _recalcular_tipo_divergencia
+    _recalcular_tipo_divergencia(folha)
+    messages.success(request, 'Divergência registrada.')
+    return redirect(f'/analise/{processo_pk}/?aba=folha')
+
+
+def excluir_divergencia(request, pk):
+    """POST: remove divergência manual da conferência de folha."""
+    div = get_object_or_404(DivergenciaFolha, pk=pk)
+    if div.detectado_automaticamente:
+        messages.error(request, 'Divergências automáticas não podem ser removidas manualmente.')
+        return redirect(f'/analise/{div.conferencia.processo_id}/?aba=folha')
+    processo_pk = div.conferencia.processo_id
+    folha = div.conferencia
+    div.delete()
+    from analise.utils import _recalcular_tipo_divergencia
+    _recalcular_tipo_divergencia(folha)
+    messages.success(request, 'Divergência removida.')
+    return redirect(f'/analise/{processo_pk}/?aba=folha')
+
+
+def gerar_achados_automaticos(request, processo_pk):
+    """POST: gera AchadoAuditoria a partir das DivergenciaFolha pendentes de um processo."""
+    if request.method != 'POST':
+        return redirect(f'/analise/{processo_pk}/?aba=achados')
+    processo = get_object_or_404(
+        Processo.objects.select_related(
+            'dados_beneficio', 'contracheque', 'instituto', 'conferenciafolha'
+        ), pk=processo_pk
+    )
+    criados = gerar_achados_de_divergencias(processo)
+    if criados:
+        messages.success(request, f'{criados} achado(s) gerado(s) automaticamente.')
+    else:
+        messages.info(request, 'Nenhuma divergência nova para converter em achado.')
+    return redirect(f'/analise/{processo_pk}/?aba=achados')
+
+
+def gerar_todos_achados(request):
+    """POST: gera AchadoAuditoria para todos os processos com divergências pendentes."""
+    from analise.models import DivergenciaFolha
+    if request.method != 'POST':
+        return redirect('/processos/')
+
+    # Processos com pelo menos uma divergência não convertida
+    pks = (
+        DivergenciaFolha.objects
+        .filter(achado_gerado=False)
+        .values_list('conferencia__processo_id', flat=True)
+        .distinct()
+    )
+    processos = Processo.objects.filter(pk__in=pks).select_related(
+        'dados_beneficio', 'contracheque', 'instituto', 'conferenciafolha'
+    )
+
+    total_criados = 0
+    processos_afetados = 0
+    for processo in processos:
+        criados = gerar_achados_de_divergencias(processo)
+        if criados:
+            total_criados += criados
+            processos_afetados += 1
+
+    if total_criados:
+        messages.success(
+            request,
+            f'{total_criados} achado(s) gerado(s) automaticamente em {processos_afetados} processo(s).'
+        )
+    else:
+        messages.info(request, 'Nenhuma divergência pendente encontrada.')
+    return redirect('/processos/')
+
+
 def nota_tecnica_pdf(request, processo_pk):
     """Gera PDF da nota técnica do processo."""
-    from xhtml2pdf import pisa
+    from weasyprint import HTML
     import io
     from datetime import date
     from django.template.loader import render_to_string
@@ -486,6 +602,25 @@ def nota_tecnica_pdf(request, processo_pk):
     eleg_obj  = getattr(processo, 'analiseelegibilidade', None)
     folha_obj = getattr(processo, 'conferenciafolha', None)
     achados_list = list(processo.achados.all())
+    divergencias_pdf = list(folha_obj.divergencias.all()) if folha_obj else []
+    eid = request.POST.get('empresa_auditora') or request.GET.get('empresa_auditora')
+    if eid:
+        empresa_auditora = EmpresaAuditora.objects.filter(pk=eid, ativa=True).first()
+    else:
+        empresa_auditora = (
+            processo.instituto.empresa_auditora if processo.instituto else None
+        ) or EmpresaAuditora.objects.filter(ativa=True).first()
+    logo_base64 = None
+    if empresa_auditora and empresa_auditora.logo:
+        try:
+            import base64
+            with open(empresa_auditora.logo.path, 'rb') as _f:
+                _data = base64.b64encode(_f.read()).decode('ascii')
+            _ext = empresa_auditora.logo.name.rsplit('.', 1)[-1].lower()
+            _mime = 'image/png' if _ext == 'png' else 'image/jpeg'
+            logo_base64 = f'data:{_mime};base64,{_data}'
+        except Exception:
+            pass
     ctx = {
         'processo': processo,
         'nota': nota,
@@ -496,6 +631,9 @@ def nota_tecnica_pdf(request, processo_pk):
         'valor_esperado': valor_esperado,
         'passos_reajuste': passos_reajuste,
         'achados': achados_list,
+        'divergencias_folha': divergencias_pdf,
+        'empresa_auditora': empresa_auditora,
+        'logo_base64': logo_base64,
         'data_geracao': date.today().strftime('%d/%m/%Y'),
         'analise_automatica': gerar_analise_tecnica(
             processo, eleg_obj, calculo_obj, folha_obj, dados_beneficio,
@@ -504,7 +642,7 @@ def nota_tecnica_pdf(request, processo_pk):
     }
     html = render_to_string('analise/nota_tecnica_pdf.html', ctx)
     buf = io.BytesIO()
-    pisa.CreatePDF(io.StringIO(html), dest=buf)
+    HTML(string=html).write_pdf(buf)
     response = HttpResponse(buf.getvalue(), content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="nota_tecnica_{processo.numero}.pdf"'
     return response

@@ -12,6 +12,7 @@ from .models import (Processo, Beneficiario, DadosBeneficio, Lote, TipoBeneficio
                       _dias_para_amd)
 from .pdf_extractor import processar_pdfs, extrair_dados_contracheque
 from .excel_utils import gerar_planilha_padronizada, ler_planilha_padronizada
+from analise.utils import recalcular_conferencia
 
 
 def _parse_date_field(value):
@@ -57,11 +58,15 @@ def lista_processos(request):
     page = request.GET.get('page', 1)
     processos = paginator.get_page(page)
 
+    from analise.models import DivergenciaFolha
+    divergencias_pendentes = DivergenciaFolha.objects.filter(achado_gerado=False).count()
+
     return render(request, 'processos/lista.html', {
         'processos': processos,
         'tipos_beneficio': TipoBeneficio.choices,
         'status_choices': StatusProcesso.choices,
         'lotes': Lote.objects.all(),
+        'divergencias_pendentes': divergencias_pendentes,
     })
 
 
@@ -91,6 +96,7 @@ def detalhe_processo(request, pk):
         'regime': regime,
         'regime_media': regime == RegimeReajuste.MEDIA,
         'regime_paridade': regime == RegimeReajuste.PARIDADE,
+        'instituto': processo.instituto,
         'tabelas_inss': tabelas_inss,
         'solicitar_contracheque': contracheque is None,
         'certidoes': certidoes,
@@ -132,13 +138,24 @@ def salvar_contracheque(request, pk):
             'mes_referencia': mes_ref,
             'valor_vencimento': _dec(request.POST.get('valor_vencimento')),
             'ultima_remuneracao_cargo': _dec(request.POST.get('ultima_remuneracao_cargo')),
+            'vencimento_base_paradigma': _dec(request.POST.get('vencimento_base_paradigma')),
+            'percentual_trienio': _dec(request.POST.get('percentual_trienio')),
             'lei_reajuste_municipal': request.POST.get('lei_reajuste_municipal', '').strip(),
             'percentual_reajuste_lei': _dec(request.POST.get('percentual_reajuste_lei')),
             'data_vigencia_reajuste': request.POST.get('data_vigencia_reajuste') or None,
             'observacoes': request.POST.get('observacoes', '').strip(),
         }
     )
-    messages.success(request, 'Dados do contracheque registrados.')
+
+    # Recalcula divergência de folha automaticamente após atualizar o contracheque.
+    processo.refresh_from_db()
+    try:
+        from analise.utils import recalcular_conferencia
+        recalcular_conferencia(processo, salvar=True)
+    except Exception:
+        pass
+
+    messages.success(request, 'Dados do contracheque registrados. Conferência de folha recalculada.')
     return redirect('processos:detalhe', pk=pk)
 
 
@@ -260,6 +277,9 @@ def _salvar_processo_from_post(request, processo_existente=None):
         }
     )
 
+    processo.refresh_from_db()
+    recalcular_conferencia(processo, salvar=True)
+
     return processo, None
 
 
@@ -299,6 +319,16 @@ def editar_processo(request, pk):
         'processo_form': pf,
         'dados_form': df,
     })
+
+
+def excluir_processo(request, pk):
+    processo = get_object_or_404(Processo, pk=pk)
+    if request.method == 'POST':
+        numero = processo.numero
+        processo.delete()
+        messages.success(request, f'Processo {numero} excluído.')
+        return redirect('processos:lista')
+    return redirect('processos:detalhe', pk=pk)
 
 
 def importar_pdf(request):
@@ -480,7 +510,6 @@ def importar_planilha(request):
                             'regime_reajuste': regime,
                         }
                     )
-
                     # ── Contracheque: campos digitados na planilha ────────────
                     dados_contracheque = {}
 
@@ -510,6 +539,10 @@ def importar_planilha(request):
                             processo=processo,
                             defaults={k: v for k, v in dados_contracheque.items() if v}
                         )
+
+                    # Recalcula após salvar tanto DadosBeneficio quanto contracheque
+                    processo.refresh_from_db()
+                    recalcular_conferencia(processo, salvar=True)
 
                 except Exception as e:
                     erros.append({'linha': linha, 'mensagem': str(e)})
@@ -678,6 +711,21 @@ def lotes(request):
 
     return render(request, 'processos/lotes.html', {
         'lotes': Lote.objects.order_by('-data_criacao'),
+    })
+
+
+def lote_detalhe(request, pk):
+    lote = get_object_or_404(Lote, pk=pk)
+    processos = (
+        Processo.objects
+        .filter(lote=lote)
+        .select_related('beneficiario', 'analiseelegibilidade', 'analisecalculo', 'conferenciafolha')
+        .order_by('numero')
+    )
+    return render(request, 'processos/lote_detalhe.html', {
+        'lote': lote,
+        'processos': processos,
+        'status_choices': StatusLote.choices,
     })
 
 

@@ -2,62 +2,61 @@
 <html>
 <head><meta charset="UTF-8">{% include 'relatorios/pdf_base_styles.html' %}</head>
 <body>
-<div class="pdf-header">
-    <div class="meta">Lote: {{ lote_label }}<br>Gerado em: {{ data_geracao }}</div>
-    <h1>Relatório de Divergências da Folha de Benefícios</h1>
-    <div class="subtitle">RPPS Barra Mansa — Estimativa de Impacto Financeiro</div>
-</div>
+{% with titulo="Relatório de Divergências da Folha de Benefícios" %}{% include 'relatorios/_pdf_header.html' %}{% endwith %}
 
+<table style="width:100%;border-collapse:separate;border-spacing:4pt 0;margin:8pt 0;">
+    <tr>
+        <td style="border:none;padding:0;width:25%"><div class="stat-cell s-nd"><div class="num">{{ divergencias|length }}</div><div class="lbl">Processos com Divergência</div></div></td>
+        <td style="border:none;padding:0;width:25%"><div class="stat-cell s-nk"><div class="num">R$&nbsp;{{ total_impacto }}</div><div class="lbl">Impacto Financeiro Total</div></div></td>
+        <td style="border:none;padding:0;width:50%"></td>
+    </tr>
+</table>
+
+<div class="section-title" style="margin-top:0">Divergências Identificadas</div>
 <table>
     <thead>
         <tr>
-            <th>Processo</th>
-            <th>Beneficiário</th>
-            <th>CPF</th>
-            <th>Tipo Benefício</th>
-            <th>Lote</th>
-            <th>Vl. Concedido (R$)</th>
-            <th>Vl. Pago Folha (R$)</th>
-            <th>Divergência (R$)</th>
-            <th>Tipo Divergência</th>
-            <th>Impacto Financeiro (R$)</th>
-            <th>Resultado</th>
+            <th style="width:6%">Processo</th>
+            <th style="width:18%">Beneficiário</th>
+            <th style="width:10%">CPF</th>
+            <th style="width:10%">Tipo</th>
+            <th style="width:8%;text-align:right">Vl. Concedido</th>
+            <th style="width:8%;text-align:right">Vl. Pago Folha</th>
+            <th style="width:7%;text-align:right">Divergência</th>
+            <th style="width:16%">Tipo Divergência</th>
+            <th style="width:9%;text-align:right">Impacto (R$)</th>
+            <th style="width:8%">Resultado</th>
         </tr>
     </thead>
     <tbody>
         {% for item in divergencias %}
         <tr class="{% cycle 'odd' 'even' %}">
             <td>{{ item.processo.numero }}</td>
-            <td>{{ item.processo.beneficiario.nome }}</td>
+            <td>{{ item.processo.beneficiario.nome|upper }}</td>
             <td>{{ item.processo.beneficiario.cpf }}</td>
-            <td>{{ item.processo.get_tipo_beneficio_display }}</td>
-            <td>{% if item.processo.lote %}{{ item.processo.lote.numero }}{% endif %}</td>
-            <td style="text-align:right">{% if item.valor_concedido %}{{ item.valor_concedido }}{% endif %}</td>
-            <td style="text-align:right">{% if item.valor_pago_folha %}{{ item.valor_pago_folha }}{% endif %}</td>
-            <td style="text-align:right" class="{% if item.divergencia_valor > 0 %}nok{% endif %}">
-                {% if item.divergencia_valor %}{{ item.divergencia_valor }}{% endif %}
+            <td style="font-size:6.5pt">{% include 'relatorios/_tipo_abrev.html' with tipo=item.processo.tipo_beneficio %}</td>
+            <td style="text-align:right">{% if item.valor_concedido %}{{ item.valor_concedido }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right">{% if item.valor_pago_folha %}{{ item.valor_pago_folha }}{% else %}&mdash;{% endif %}</td>
+            <td style="text-align:right" class="{% if item.divergencia_valor and item.divergencia_valor > 0 %}nok{% endif %}">
+                {% if item.divergencia_valor %}{{ item.divergencia_valor }}{% else %}&mdash;{% endif %}
             </td>
-            <td>{{ item.get_tipo_divergencia_display }}</td>
+            <td style="font-size:6.5pt">{{ item.get_tipo_divergencia_display }}</td>
             <td style="text-align:right" class="nok">
-                {% if item.impacto_financeiro_estimado %}{{ item.impacto_financeiro_estimado }}{% endif %}
+                {% if item.impacto_financeiro_estimado %}{{ item.impacto_financeiro_estimado }}{% else %}&mdash;{% endif %}
             </td>
-            <td class="badge-{{ item.resultado|lower }}">{{ item.get_resultado_display }}</td>
+            {% include 'relatorios/_resultado_td.html' with resultado=item.resultado %}
         </tr>
         {% empty %}
-        <tr><td colspan="11" style="text-align:center;color:#888;">Nenhuma divergência encontrada.</td></tr>
+        <tr><td colspan="10" style="text-align:center;color:#888;padding:10pt;">Nenhuma divergência encontrada.</td></tr>
         {% endfor %}
         {% if divergencias %}
         <tr class="total">
-            <td colspan="9" style="text-align:right;">TOTAL DO IMPACTO FINANCEIRO ESTIMADO</td>
+            <td colspan="8" style="text-align:right">TOTAL DO IMPACTO FINANCEIRO ESTIMADO</td>
             <td style="text-align:right">R$ {{ total_impacto }}</td>
             <td></td>
         </tr>
         {% endif %}
     </tbody>
 </table>
-
-<p style="font-size:7pt;color:#555;margin-top:6pt;">
-    {{ divergencias|length }} processo(s) com divergência &nbsp;|&nbsp; Impacto total: R$ {{ total_impacto }}
-</p>
 </body>
 </html>

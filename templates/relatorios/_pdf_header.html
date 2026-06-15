@@ -1,0 +1,55 @@
+{% comment %}
+Cabeçalho reutilizável dos PDFs.
+Variáveis: logo_base64, empresa_auditora, titulo, doc_sub, lote_label, data_geracao, instituto_nome
+{% endcomment %}
+<style>
+@page {
+    @bottom-left {
+        content: 'Auditoria RPPS{% if instituto_nome %} — {{ instituto_nome }}{% endif %}{% if lote_label %} · Lote {{ lote_label }}{% endif %} · Gerado em {{ data_geracao }}';
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 6.5pt;
+        color: #4A5568;
+        border-top: 1.5pt solid #2C7A7B;
+        padding-top: 3pt;
+        vertical-align: top;
+    }
+    @bottom-right {
+        content: 'CONFIDENCIAL  Pág. ' counter(page) ' / ' counter(pages);
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 7pt;
+        font-weight: bold;
+        color: #4A5568;
+        border-top: 1.5pt solid #2C7A7B;
+        padding-top: 3pt;
+        vertical-align: top;
+    }
+}
+</style>
+<div class="pdf-header">
+    <table>
+        <tr>
+            <td>
+                {% if logo_base64 %}
+                <div class="hdr-logo"><img src="{{ logo_base64 }}" alt="{{ empresa_auditora.nome }}"></div>
+                {% elif empresa_auditora %}
+                <div class="hdr-company">{{ empresa_auditora.nome }}</div>
+                {% endif %}
+                <div class="hdr-subtitle">
+                    Análise de Conformidade Previdenciária{% if instituto_nome %} &mdash; {{ instituto_nome }}{% endif %}
+                </div>
+            </td>
+            <td class="hdr-pag">Pág. <span class="page-num"></span></td>
+        </tr>
+    </table>
+</div>
+<div class="accent-line"></div>
+<div class="title-block">
+    <div class="doc-title">{{ titulo }}</div>
+    {% if doc_sub %}
+    <div class="doc-sub">{{ doc_sub }}</div>
+    {% elif lote_label %}
+    <div class="doc-sub">Lote: {{ lote_label }}{% if data_geracao %} &mdash; Gerado em {{ data_geracao }}{% endif %}</div>
+    {% elif data_geracao %}
+    <div class="doc-sub">Gerado em {{ data_geracao }}</div>
+    {% endif %}
+</div>

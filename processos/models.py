@@ -183,6 +183,15 @@ class Processo(models.Model):
             return 'CONFORME'
         return 'INDETERMINADO'
 
+    def get_resultado_analise_display(self):
+        _labels = {
+            'CONFORME':     'Conforme',
+            'RESSALVAS':    'Conforme com Ressalvas',
+            'NAO_CONFORME': 'Não Conforme',
+            'INDETERMINADO':'Indeterminado',
+        }
+        return _labels.get(self.get_resultado_analise(), None)
+
 
 class ReajusteINSS(models.Model):
     ano = models.IntegerField(unique=True, verbose_name='Ano')
@@ -420,6 +429,16 @@ class ContrachequeAuditoria(models.Model):
         verbose_name='Última Remuneração do Cargo Efetivo Paradigma (R$)',
         help_text='Para regime PARIDADE: remuneração atual do servidor ativo no cargo equivalente.'
     )
+    vencimento_base_paradigma = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Vencimento Base do Cargo Paradigma (R$)',
+        help_text='Parcela do vencimento básico do cargo paradigma, sem adicionais. Base de cálculo do triênio.'
+    )
+    percentual_trienio = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True,
+        verbose_name='Percentual do Triênio (%)',
+        help_text='Percentual total de triênio/anuênio acumulado. Aplicado sobre o vencimento base.'
+    )
     lei_reajuste_municipal = models.CharField(
         max_length=300, blank=True,
         verbose_name='Lei Municipal de Reajuste (servidores em atividade)',
@@ -453,6 +472,14 @@ class ContrachequeAuditoria(models.Model):
     # Contas classificadas como desconto nos holerites do RPPS Mangaratiba
     _CONTAS_DESCONTO = {'1021', '1025', '1630', '1631', '1632', '1640', '1641'}
 
+    @property
+    def valor_trienio_calculado(self):
+        """Triênio = percentual_trienio% × vencimento_base_paradigma."""
+        if self.vencimento_base_paradigma and self.percentual_trienio:
+            from decimal import Decimal as _D
+            return (self.vencimento_base_paradigma * self.percentual_trienio / _D('100')).quantize(_D('0.01'))
+        return None
+
     def get_demonstrativo(self):
         """Retorna o demonstrativo como dict, ou None se não importado.
 
@@ -472,8 +499,12 @@ class ContrachequeAuditoria(models.Model):
         def _parse(v):
             if not v:
                 return Decimal('0')
+            s = str(v).strip()
             try:
-                return Decimal(str(v).replace('.', '').replace(',', '.'))
+                if ',' in s:
+                    return Decimal(s.replace('.', '').replace(',', '.'))
+                else:
+                    return Decimal(s)
             except InvalidOperation:
                 return Decimal('0')
 
@@ -501,6 +532,93 @@ class ContrachequeAuditoria(models.Model):
 
         demo['rubricas'] = rubricas
         return demo
+
+    def analisar_trienio_demonstrativo(self):
+        """
+        Analisa o demonstrativo para detectar triênio calculado incorretamente.
+
+        Identifica a rubrica de TRIÊNIO (por descrição) e a de SALÁRIO/VENCIMENTO BASE,
+        recalcula o triênio correto (percentual × vencimento_base apenas) e retorna
+        a diferença em relação ao que foi efetivamente pago.
+
+        Retorna dict ou None se dados insuficientes.
+        """
+        demo = self.get_demonstrativo()
+        if not demo:
+            return None
+
+        from decimal import Decimal, InvalidOperation
+
+        def _parse(v):
+            if not v:
+                return Decimal('0')
+            s = str(v).strip()
+            try:
+                if ',' in s:
+                    return Decimal(s.replace('.', '').replace(',', '.'))
+                else:
+                    return Decimal(s)
+            except InvalidOperation:
+                return Decimal('0')
+
+        rubricas = demo.get('rubricas', [])
+
+        vencimento_base = None
+        trienio_percentual = None
+        trienio_pago = None
+        total_vencimentos = Decimal('0')
+
+        for r in rubricas:
+            descricao = (r.get('descricao') or '').upper()
+            venc_raw = r.get('vencimento', '') or ''
+            desc_raw = r.get('desconto', '') or ''
+            venc_val = _parse(venc_raw)
+            desc_val = _parse(desc_raw)
+
+            if desc_val > 0:
+                continue  # rubrica de desconto — ignora para o total
+
+            total_vencimentos += venc_val
+
+            # Rubrica de triênio: descrição contém TRIÊNIO ou TRIENIO
+            is_trienio = 'TRIÊNIO' in descricao or 'TRIENIO' in descricao
+            if is_trienio:
+                trienio_pago = venc_val
+                ref = (r.get('referencia') or '').strip()
+                if ',' in ref:
+                    ref = ref.replace('.', '').replace(',', '.')
+                try:
+                    trienio_percentual = Decimal(ref)
+                except InvalidOperation:
+                    pass
+                continue
+
+            # Rubrica de vencimento base: SALÁRIO/SALARIO/VENCIMENTO no título,
+            # não é triênio nem gratificação incorporada
+            is_base = any(k in descricao for k in ('SALÁRIO', 'SALARIO', 'VENCIMENTO BASE', 'VENC. BASE', 'VENC BASE'))
+            is_base = is_base and not is_trienio
+            if is_base and vencimento_base is None:
+                vencimento_base = venc_val
+
+        if vencimento_base is None or trienio_pago is None or not trienio_percentual:
+            return None
+
+        trienio_correto = (vencimento_base * trienio_percentual / Decimal('100')).quantize(Decimal('0.01'))
+        diferenca_trienio = (trienio_pago - trienio_correto).quantize(Decimal('0.01'))
+        valor_esperado_correto = (total_vencimentos - trienio_pago + trienio_correto).quantize(Decimal('0.01'))
+        pagamento_maior = (total_vencimentos - valor_esperado_correto).quantize(Decimal('0.01'))
+
+        return {
+            'vencimento_base':        vencimento_base,
+            'trienio_percentual':     trienio_percentual,
+            'trienio_pago':           trienio_pago,
+            'trienio_correto':        trienio_correto,
+            'diferenca_trienio':      diferenca_trienio,
+            'total_vencimentos':      total_vencimentos,
+            'valor_esperado_correto': valor_esperado_correto,
+            'pagamento_maior':        pagamento_maior if pagamento_maior > 0 else Decimal('0'),
+            'tem_divergencia':        pagamento_maior > Decimal('0.01'),
+        }
 
     def __str__(self):
         return f'Contracheque — {self.processo} ({self.mes_referencia})'

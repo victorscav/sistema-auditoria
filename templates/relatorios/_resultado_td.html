@@ -1,0 +1,4 @@
+{% comment %}
+Gera <td> completo com cor aplicada na tag td — garante herança de font-size igual aos outros tópicos.
+Uso: {% include 'relatorios/_resultado_td.html' with resultado=valor %}
+{% endcomment %}{% if resultado == 'CONFORME' %}<td class="ok">Conforme</td>{% elif resultado == 'NAO_CONFORME' %}<td class="nok">Não Conf.</td>{% elif resultado == 'RESSALVAS' or resultado == 'CONFORME_RESSALVAS' %}<td class="warn">Ressalvas</td>{% elif resultado == 'INDETERMINADO' %}<td style="color:#718096">Indeterm.</td>{% else %}<td>Pendente</td>{% endif %}

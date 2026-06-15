@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if empresa %}Editar{% else %}Nova{% endif %} Empresa Auditora{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'institutos:empresas' %}">Empresas Auditoras</a></li>
+<li class="breadcrumb-item active">{% if empresa %}Editar{{ empresa }}{% else %}Nova Empresa{% endif %}</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-bold">{% if empresa %}Editar Empresa{% else %}Nova Empresa Auditora{% endif %}</h4>
+    <a href="{% url 'institutos:empresas' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Voltar
+    </a>
+</div>
+
+<div class="card card-stat" style="max-width:640px;">
+    <div class="card-body">
+        <form method="post" enctype="multipart/form-data"
+              action="{% if empresa %}{% url 'institutos:editar_empresa' empresa.pk %}{% else %}{% url 'institutos:nova_empresa' %}{% endif %}">
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
+                <input type="text" name="nome" class="form-control" required
+                       value="{{ empresa.nome|default:'' }}" placeholder="Ex: VPA Soluções Atuariais">
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-sm-4">
+                    <label class="form-label fw-semibold">Sigla</label>
+                    <input type="text" name="sigla" class="form-control"
+                           value="{{ empresa.sigla|default:'' }}" placeholder="Ex: VPA">
+                </div>
+                <div class="col-sm-8">
+                    <label class="form-label fw-semibold">CNPJ</label>
+                    <input type="text" name="cnpj" class="form-control"
+                           value="{{ empresa.cnpj|default:'' }}" placeholder="00.000.000/0000-00">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Logo</label>
+                {% if empresa and empresa.logo %}
+                <div class="mb-2 p-2 border rounded d-inline-block">
+                    <img src="{{ empresa.logo.url }}" alt="Logo atual"
+                         style="max-height:60px;max-width:180px;object-fit:contain;display:block;">
+                    <small class="text-muted">Logo atual</small>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="remover_logo" value="1" id="chk-remover">
+                    <label class="form-check-label text-danger small" for="chk-remover">Remover logo atual</label>
+                </div>
+                {% endif %}
+                <input type="file" name="logo" class="form-control" accept="image/*">
+                <div class="form-text">PNG ou JPG recomendado. Será exibida no cabeçalho dos PDFs.</div>
+            </div>
+
+            <div class="mb-4">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="ativa" id="chk-ativa"
+                           {% if not empresa or empresa.ativa %}checked{% endif %}>
+                    <label class="form-check-label" for="chk-ativa">Empresa ativa</label>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg me-1"></i>{% if empresa %}Salvar alterações{% else %}Cadastrar{% endif %}
+                </button>
+                <a href="{% url 'institutos:empresas' %}" class="btn btn-outline-secondary">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

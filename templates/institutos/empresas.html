@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block title %}Empresas Auditoras{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
+<li class="breadcrumb-item active">Empresas Auditoras</li>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0 fw-bold">Empresas Auditoras</h4>
+    <a href="{% url 'institutos:nova_empresa' %}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Nova Empresa
+    </a>
+</div>
+
+{% if messages %}
+{% for msg in messages %}
+<div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
+    {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="card card-stat">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3" style="width:80px">Logo</th>
+                    <th>Nome</th>
+                    <th>Sigla</th>
+                    <th>CNPJ</th>
+                    <th>Status</th>
+                    <th class="text-end pe-3">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for empresa in empresas %}
+                <tr>
+                    <td class="ps-3">
+                        {% if empresa.logo %}
+                        <img src="{{ empresa.logo.url }}" alt="{{ empresa }}" style="max-height:36px;max-width:70px;object-fit:contain;">
+                        {% else %}
+                        <span class="text-muted small">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="fw-semibold">{{ empresa.nome }}</td>
+                    <td>{{ empresa.sigla|default:"—" }}</td>
+                    <td><small class="text-muted">{{ empresa.cnpj|default:"—" }}</small></td>
+                    <td>
+                        {% if empresa.ativa %}
+                        <span class="badge bg-success">Ativa</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Inativa</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end pe-3">
+                        <a href="{% url 'institutos:editar_empresa' empresa.pk %}" class="btn btn-sm btn-outline-secondary py-0">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'institutos:excluir_empresa' empresa.pk %}" class="d-inline"
+                              onsubmit="return confirm('Excluir a empresa {{ empresa }}?')">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger py-0">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        <i class="bi bi-building fs-1 d-block mb-2"></i>
+                        Nenhuma empresa cadastrada.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
