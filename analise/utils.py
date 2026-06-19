@@ -439,6 +439,10 @@ def recalcular_conferencia(processo, salvar=False):
     if valor_esperado is not None and folha.valor_esperado != valor_esperado:
         folha.valor_esperado = valor_esperado
 
+    # Mantém resultado em memória consistente com tipo_divergencia já salvo
+    if folha.tipo_divergencia != 'SEM_DIVERGENCIA' and folha.resultado == 'CONFORME':
+        folha.resultado = 'NAO_CONFORME'
+
     if not salvar:
         return
 
@@ -712,9 +716,16 @@ def _recalcular_tipo_divergencia(folha):
             novo_tipo = ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA
             novo_impact = Decimal('0.00')
 
-    if folha.tipo_divergencia != novo_tipo or folha.impacto_financeiro_estimado != novo_impact:
+    novo_resultado = (
+        'CONFORME' if novo_tipo == ConferenciaFolha.TipoDivergencia.SEM_DIVERGENCIA
+        else 'NAO_CONFORME'
+    )
+    if (folha.tipo_divergencia != novo_tipo
+            or folha.impacto_financeiro_estimado != novo_impact
+            or folha.resultado != novo_resultado):
         folha.tipo_divergencia = novo_tipo
         folha.impacto_financeiro_estimado = novo_impact
+        folha.resultado = novo_resultado
         folha.save()
 
 

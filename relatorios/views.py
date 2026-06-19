@@ -423,3 +423,212 @@ def relatorio_final_lote(request):
     }
     fname = f"relatorio_final_{lote_label.replace('/', '-')}.pdf"
     return _pdf_response(_render_pdf('relatorios/pdf_final_lote.html', ctx), fname)
+
+
+# ── 7. Projeção de Economia — Acerto de Divergências (12 Meses) ───────────────
+
+def relatorio_projecao_economia(request):
+    lote_id = request.POST.get('lote') or None
+
+    proc_qs = Processo.objects.select_related(
+        'dados_beneficio', 'conferenciafolha', 'contracheque', 'instituto',
+    )
+    if lote_id:
+        proc_qs = proc_qs.filter(lote_id=lote_id)
+    for p in proc_qs:
+        recalcular_conferencia(p)
+
+    div_qs = ConferenciaFolha.objects.exclude(
+        tipo_divergencia='SEM_DIVERGENCIA'
+    ).select_related('processo__beneficiario', 'processo__lote')
+    if lote_id:
+        div_qs = div_qs.filter(processo__lote_id=lote_id)
+
+    divergencias = list(div_qs)
+
+    _maiores = {'PAGAMENTO_MAIOR', 'COM_DIVERGENCIAS'}
+    maior_divs = [d for d in divergencias if d.tipo_divergencia in _maiores and d.impacto_financeiro_estimado]
+    menor_divs = [d for d in divergencias if d.tipo_divergencia == 'PAGAMENTO_MENOR' and d.impacto_financeiro_estimado]
+
+    mensal_maior = sum(float(d.impacto_financeiro_estimado) for d in maior_divs)
+    mensal_menor = sum(float(d.impacto_financeiro_estimado) for d in menor_divs)
+
+    def brl(v):
+        v = float(v)
+        s = f'{abs(v):,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return f'R$ {s}' if v >= 0 else f'R$ -{s}'
+
+    def abbrev(v):
+        v = float(v)
+        if v == 0:
+            return 'R$ 0'
+        if v >= 1_000_000:
+            return f'R${v / 1_000_000:.1f}M'.replace('.', ',')
+        if v >= 1_000:
+            return f'R${round(v / 1_000):.0f}mil'
+        return f'R${v:.0f}'
+
+    # Per-process rows for the detail table
+    rows = []
+    for d in divergencias:
+        if not d.impacto_financeiro_estimado:
+            continue
+        imp = float(d.impacto_financeiro_estimado)
+        is_maior = d.tipo_divergencia in _maiores
+        rows.append({
+            'd': d,
+            'is_maior': is_maior,
+            'tipo_label': d.get_tipo_divergencia_display(),
+            'imp_fmt': brl(imp),
+            'p3m_fmt': brl(imp * 3),
+            'p6m_fmt': brl(imp * 6),
+            'p12m_fmt': brl(imp * 12),
+        })
+
+    # 12-month cumulative projection
+    MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+    hoje = date.today()
+    projecao = []
+    for i in range(12):
+        m = i + 1
+        eco = mensal_maior * m
+        obr = mensal_menor * m
+        projecao.append({
+            'mes': m,
+            'mes_nome': MESES[(hoje.month - 1 + i) % 12],
+            'economia_fmt': brl(eco),
+            'obrigacao_fmt': brl(obr),
+            'saldo_fmt': brl(eco - obr),
+            'saldo_pos': (eco - obr) >= 0,
+        })
+
+    # ── SVG chart ────────────────────────────────────────────────────────────
+    # viewBox 0 0 760 260
+    CL, CR, CT, CB = 85, 755, 18, 200
+    CH = CB - CT       # 182 — usable bar height
+    CW = CR - CL       # 670 — usable width
+    SLOT_W = CW / 12   # ≈ 55.8 px per month slot
+
+    have_maior = mensal_maior > 0
+    have_menor = mensal_menor > 0
+
+    # Only show dual bars when MENOR is at least 10 % of MAIOR — otherwise
+    # the minority series would be sub-pixel and make the bars look broken.
+    threshold = 0.10
+    chart_menor = have_menor and (
+        mensal_maior == 0 or (mensal_menor / mensal_maior) >= threshold
+    )
+    chart_maior = have_maior
+
+    # Independent Y-axis scale per series when both are visible
+    max_maior = max(mensal_maior * 12, 1.0)
+    max_menor = max(mensal_menor * 12, 1.0)
+
+    def lerp_color(c1, c2, t):
+        r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+        r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+        r = min(255, max(0, round(r1 + (r2 - r1) * t)))
+        g = min(255, max(0, round(g1 + (g2 - g1) * t)))
+        b = min(255, max(0, round(b1 + (b2 - b1) * t)))
+        return f'#{r:02X}{g:02X}{b:02X}'
+
+    have_both_chart = chart_maior and chart_menor
+
+    chart_bars = []
+    for i in range(12):
+        m = i + 1
+        eco = mensal_maior * m
+        obr = mensal_menor * m
+        slot_x = CL + i * SLOT_W
+        t = i / 11 if i < 11 else 1.0
+
+        if have_both_chart:
+            bw = round(SLOT_W * 0.37, 1)
+            xm = round(slot_x + SLOT_W * 0.06, 1)
+            xo = round(slot_x + SLOT_W * 0.57, 1)
+        else:
+            bw = round(SLOT_W * 0.65, 1)
+            xm = round(slot_x + (SLOT_W - bw) / 2, 1)
+            xo = xm
+
+        hm = round(eco / max_maior * CH, 1) if chart_maior else 0.0
+        ho = round(obr / max_menor * CH, 1) if chart_menor else 0.0
+        show_val = m in (1, 3, 6, 9, 12)
+        y_top_m = round(CB - hm, 1)
+        y_top_o = round(CB - ho, 1)
+
+        # Label goes above bar; if no room (bar reaches near chart top), put it inside with white text
+        LABEL_MARGIN = CT + 10  # minimum y a label can have while still outside the bar
+        yl_m_above = round(y_top_m - 7, 1)
+        yl_o_above = round(y_top_o - 7, 1)
+        inside_m = yl_m_above < LABEL_MARGIN
+        inside_o = yl_o_above < LABEL_MARGIN
+
+        chart_bars.append({
+            'mes': m,
+            'mes_nome': MESES[(hoje.month - 1 + i) % 12],
+            'x_mid': round(slot_x + SLOT_W / 2, 1),
+            'x_maior': xm,
+            'cx_maior': round(xm + bw / 2, 1),
+            'x_menor': xo,
+            'cx_menor': round(xo + bw / 2, 1),
+            'bw': bw,
+            'h_maior': hm,
+            'h_menor': ho,
+            'y_maior': y_top_m,
+            'y_menor': y_top_o,
+            'yl_maior': round(y_top_m + 12, 1) if inside_m else yl_m_above,
+            'yl_menor': round(y_top_o + 12, 1) if inside_o else yl_o_above,
+            'lbl_color_maior': '#FFFFFF' if inside_m else '#1A5C5D',
+            'lbl_color_menor': '#FFFFFF' if inside_o else '#9B2C2C',
+            'color_maior': lerp_color('#A8D8D8', '#1A5C5D', t),
+            'color_menor': lerp_color('#FBD38D', '#9B2C2C', t),
+            'show_val': show_val,
+            'lbl_maior': abbrev(eco) if chart_maior else '',
+            'lbl_menor': abbrev(obr) if chart_menor else '',
+        })
+
+    # Y-axis grid lines (based on MAIOR scale — primary axis)
+    grid_lines = []
+    for pct in [25, 50, 75, 100]:
+        y = round(CB - CH * pct / 100, 1)
+        grid_lines.append({'y': y, 'label': abbrev(max_maior * pct / 100)})
+
+    inst_qs = Processo.objects.filter(lote_id=lote_id) if lote_id else Processo.objects.all()
+    empresa = _get_empresa(request)
+
+    ctx = {
+        'rows': rows,
+        'n_divergencias': len(divergencias),
+        'n_maior': len(maior_divs),
+        'n_menor': len(menor_divs),
+        'mensal_maior_fmt': brl(mensal_maior),
+        'mensal_menor_fmt': brl(mensal_menor),
+        'economia_12m_fmt': brl(mensal_maior * 12),
+        'obrigacao_12m_fmt': brl(mensal_menor * 12),
+        'saldo_12m_fmt': brl((mensal_maior - mensal_menor) * 12),
+        'saldo_positivo': (mensal_maior - mensal_menor) >= 0,
+        'projecao': projecao,
+        'have_maior': have_maior,
+        'have_menor': have_menor,
+        'chart_maior': chart_maior,
+        'chart_menor': chart_menor,
+        'have_both_chart': have_both_chart,
+        'chart_bars': chart_bars,
+        'chart_left': CL,
+        'chart_right': CR,
+        'chart_top': CT,
+        'chart_bottom': CB,
+        'chart_label_x': CL - 5,
+        'chart_left_legend': CL + 16,
+        'grid_lines': grid_lines,
+        'lote_label': _lote_label(lote_id),
+        'data_geracao': hoje.strftime('%d/%m/%Y'),
+        'instituto_nome': _instituto_nome(inst_qs),
+        'empresa_auditora': empresa,
+        'logo_base64': _logo_base64(empresa),
+    }
+    return _pdf_response(
+        _render_pdf('relatorios/pdf_projecao_economia.html', ctx),
+        'projecao_economia_divergencias.pdf',
+    )

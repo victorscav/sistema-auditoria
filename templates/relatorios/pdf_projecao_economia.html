@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+{% include 'relatorios/pdf_base_styles.html' %}
+<style>
+.nota-box {
+    background: #EBF8FF;
+    border-left: 3pt solid #2C7A7B;
+    padding: 5pt 9pt;
+    font-size: 7.5pt;
+    color: #2A4365;
+    margin: 5pt 0 8pt 0;
+    line-height: 1.5;
+}
+</style>
+</head>
+<body>
+{% with titulo="Projeção de Economia — Acerto de Divergências Financeiras" doc_sub="Estimativa de impacto acumulado ao longo de 12 meses com o saneamento das divergências identificadas na folha de benefícios" %}
+{% include 'relatorios/_pdf_header.html' %}
+{% endwith %}
+
+<!-- KPI boxes -->
+<table style="width:100%;border-collapse:separate;border-spacing:4pt 0;margin:8pt 0 6pt 0;">
+<tr>
+  <td style="border:none;padding:0;width:16%">
+    <div class="stat-cell s-nd">
+      <div class="num">{{ n_divergencias }}</div>
+      <div class="lbl">Processos c/ Divergência</div>
+    </div>
+  </td>
+  <td style="border:none;padding:0;width:16%">
+    <div class="stat-cell s-nk">
+      <div class="num">{{ n_maior }}</div>
+      <div class="lbl">Pagamentos a Maior</div>
+    </div>
+  </td>
+  <td style="border:none;padding:0;width:16%">
+    <div class="stat-cell s-wn">
+      <div class="num">{{ n_menor }}</div>
+      <div class="lbl">Pagamentos a Menor</div>
+    </div>
+  </td>
+  <td style="border:none;padding:0;width:16%">
+    <div class="stat-cell s-ok">
+      <div class="num" style="font-size:13pt">{{ economia_12m_fmt }}</div>
+      <div class="lbl">Economia Potencial em 12m</div>
+    </div>
+  </td>
+  {% if have_menor %}
+  <td style="border:none;padding:0;width:16%">
+    <div class="stat-cell s-wn">
+      <div class="num" style="font-size:13pt">{{ obrigacao_12m_fmt }}</div>
+      <div class="lbl">Obrigações a Regularizar 12m</div>
+    </div>
+  </td>
+  <td style="border:none;padding:0;width:16%">
+    <div class="stat-cell {% if saldo_positivo %}s-tl{% else %}s-nk{% endif %}">
+      <div class="num" style="font-size:13pt">{{ saldo_12m_fmt }}</div>
+      <div class="lbl">Saldo Líquido 12m</div>
+    </div>
+  </td>
+  {% else %}
+  <td style="border:none;padding:0;width:16%">
+    <div class="stat-cell s-tl">
+      <div class="num" style="font-size:13pt">{{ mensal_maior_fmt }}</div>
+      <div class="lbl">Impacto Mensal Total</div>
+    </div>
+  </td>
+  <td style="border:none;padding:0;width:16%"></td>
+  {% endif %}
+</tr>
+</table>
+
+<!-- ── CHART ─────────────────────────────────────────────────────────────── -->
+<div class="section-title" style="margin-top:4pt">Projeção Acumulada de Economia com o Acerto das Divergências — 12 Meses</div>
+
+{% load l10n %}
+{% localize off %}
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 760 260" font-family="Helvetica, Arial, sans-serif">
+
+  <!-- Y-axis grid lines -->
+  {% for gl in grid_lines %}
+  <line x1="{{ chart_left }}" y1="{{ gl.y }}" x2="{{ chart_right }}" y2="{{ gl.y }}" stroke="#E2E8F0" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <text x="{{ chart_label_x }}" y="{{ gl.y }}" dy="3" text-anchor="end" font-size="7.5" fill="#718096">{{ gl.label }}</text>
+  {% endfor %}
+
+  <!-- Axes -->
+  <line x1="{{ chart_left }}" y1="{{ chart_bottom }}" x2="{{ chart_right }}" y2="{{ chart_bottom }}" stroke="#CBD5E0" stroke-width="1.2"/>
+  <line x1="{{ chart_left }}" y1="{{ chart_top }}" x2="{{ chart_left }}" y2="{{ chart_bottom }}" stroke="#CBD5E0" stroke-width="0.8"/>
+
+  <!-- Bars -->
+  {% for bar in chart_bars %}
+
+    <!-- MAIOR bar (teal gradient, light → dark) -->
+    {% if chart_maior %}{% if bar.h_maior %}
+    <rect x="{{ bar.x_maior }}" y="{{ bar.y_maior }}" width="{{ bar.bw }}" height="{{ bar.h_maior }}" fill="{{ bar.color_maior }}" rx="2"/>
+    {% endif %}
+    {% if bar.show_val %}{% if bar.lbl_maior %}
+    <text x="{{ bar.cx_maior }}" y="{{ bar.yl_maior }}" text-anchor="middle" font-size="6.5" fill="{{ bar.lbl_color_maior }}" font-weight="bold">{{ bar.lbl_maior }}</text>
+    {% endif %}{% endif %}
+    {% endif %}
+
+    <!-- MENOR bar (amber gradient, independent scale) -->
+    {% if chart_menor %}{% if bar.h_menor %}
+    <rect x="{{ bar.x_menor }}" y="{{ bar.y_menor }}" width="{{ bar.bw }}" height="{{ bar.h_menor }}" fill="{{ bar.color_menor }}" rx="2"/>
+    {% endif %}
+    {% if bar.show_val %}{% if bar.lbl_menor %}
+    <text x="{{ bar.cx_menor }}" y="{{ bar.yl_menor }}" text-anchor="middle" font-size="6.5" fill="{{ bar.lbl_color_menor }}" font-weight="bold">{{ bar.lbl_menor }}</text>
+    {% endif %}{% endif %}
+    {% endif %}
+
+    <!-- Tick mark on baseline -->
+    <line x1="{{ bar.x_mid }}" y1="{{ chart_bottom }}" x2="{{ bar.x_mid }}" y2="204" stroke="#CBD5E0" stroke-width="0.6"/>
+
+    <!-- Month labels -->
+    <text x="{{ bar.x_mid }}" y="214" text-anchor="middle" font-size="8" fill="#4A5568">{{ bar.mes_nome }}</text>
+    <text x="{{ bar.x_mid }}" y="222" text-anchor="middle" font-size="6" fill="#A0AEC0">M{{ bar.mes }}</text>
+
+  {% endfor %}
+
+  <!-- Legend -->
+  {% if chart_maior %}
+  <rect x="{{ chart_left }}" y="235" width="12" height="8" fill="#2C7A7B" rx="2"/>
+  <text x="{{ chart_left_legend }}" y="242" font-size="8" fill="#4A5568">Economia Acumulada — Pagamentos a Maior Corrigidos</text>
+  {% endif %}
+  {% if chart_menor %}
+  <rect x="350" y="235" width="12" height="8" fill="#C05621" rx="2"/>
+  <text x="366" y="242" font-size="8" fill="#4A5568">Obrigações — Pagamentos a Menor (escala independente)</text>
+  {% endif %}
+
+</svg>
+{% endlocalize %}
+
+<div class="nota-box">
+  <strong>Nota metodológica:</strong> A projeção assume manutenção das divergências identificadas com impacto financeiro mensal constante. A <em>Economia</em> representa o montante que o instituto deixará de desembolsar indevidamente após o saneamento de pagamentos a maior. As <em>Obrigações</em> indicam valores adicionais devidos a beneficiários que recebem abaixo do correto.{% if have_menor and not chart_menor %} Os pagamentos a menor identificados são de baixo impacto relativo (inferior a 10 % dos pagamentos a maior) e estão detalhados apenas nas tabelas abaixo.{% endif %}
+</div>
+
+<!-- ── DETAIL TABLE ────────────────────────────────────────────────────────── -->
+<div class="section-title">Detalhamento por Processo — Projeção de Impacto Individual</div>
+<table>
+<thead>
+  <tr>
+    <th style="width:6%">Processo</th>
+    <th style="width:18%">Beneficiário</th>
+    <th style="width:10%">CPF</th>
+    <th style="width:14%">Tipo de Divergência</th>
+    <th style="width:11%;text-align:right">Impacto/Mês</th>
+    <th style="width:10%;text-align:right">3 Meses</th>
+    <th style="width:10%;text-align:right">6 Meses</th>
+    <th style="width:11%;text-align:right">12 Meses</th>
+  </tr>
+</thead>
+<tbody>
+  {% for row in rows %}
+  <tr class="{% cycle 'odd' 'even' %}">
+    <td>{{ row.d.processo.numero }}</td>
+    <td>{{ row.d.processo.beneficiario.nome|upper }}</td>
+    <td>{{ row.d.processo.beneficiario.cpf }}</td>
+    <td style="font-size:6.5pt;{% if row.is_maior %}color:#276749{% else %}color:#9B2C2C{% endif %}">
+      {{ row.tipo_label }}
+    </td>
+    <td style="text-align:right">{{ row.imp_fmt }}</td>
+    <td style="text-align:right">{{ row.p3m_fmt }}</td>
+    <td style="text-align:right">{{ row.p6m_fmt }}</td>
+    <td style="text-align:right;font-weight:bold;{% if row.is_maior %}color:#276749{% else %}color:#9B2C2C{% endif %}">
+      {{ row.p12m_fmt }}
+    </td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="8" style="text-align:center;color:#888;padding:10pt">
+      Nenhuma divergência financeira identificada para o lote selecionado.
+    </td>
+  </tr>
+  {% endfor %}
+  {% if rows %}
+  <tr class="total">
+    <td colspan="4" style="text-align:right">TOTAL — ECONOMIA POTENCIAL COM O SANEAMENTO</td>
+    <td style="text-align:right">{{ mensal_maior_fmt }}</td>
+    <td colspan="2"></td>
+    <td style="text-align:right">{{ economia_12m_fmt }}</td>
+  </tr>
+  {% endif %}
+</tbody>
+</table>
+
+<!-- ── MONTHLY PROJECTION TABLE ───────────────────────────────────────────── -->
+<div class="section-title">Projeção Mensal Acumulada</div>
+<table>
+<thead>
+  <tr>
+    <th style="width:14%">Mês</th>
+    <th style="width:28%;text-align:right">Economia Acumulada (R$)</th>
+    {% if have_menor %}<th style="width:26%;text-align:right">Obrigações Acumuladas (R$)</th>{% endif %}
+    <th style="text-align:right">Saldo Líquido Acumulado (R$)</th>
+  </tr>
+</thead>
+<tbody>
+  {% for row in projecao %}
+  <tr class="{% cycle 'odd' 'even' %}">
+    <td style="font-weight:bold">{{ row.mes_nome }} <span style="color:#A0AEC0;font-weight:normal;font-size:7pt">(M{{ row.mes }})</span></td>
+    <td style="text-align:right;color:#276749;font-weight:bold">{{ row.economia_fmt }}</td>
+    {% if have_menor %}<td style="text-align:right;color:#744210">{{ row.obrigacao_fmt }}</td>{% endif %}
+    <td style="text-align:right;font-weight:bold;{% if row.saldo_pos %}color:#276749{% else %}color:#9B2C2C{% endif %}">
+      {{ row.saldo_fmt }}
+    </td>
+  </tr>
+  {% endfor %}
+</tbody>
+</table>
+
+</body>
+</html>

@@ -478,6 +478,12 @@ def importar_planilha(request):
                         if update_fields:
                             Processo.objects.filter(pk=processo.pk).update(**update_fields)
 
+                    # Nunca sobrescreve dados de processo que pertence a outro lote.
+                    # Evita que uma importação de um lote contamine dados de outro lote
+                    # quando dois processos compartilham o mesmo número.
+                    if not created and lote_id and processo.lote_id and str(processo.lote_id) != str(lote_id):
+                        continue
+
                     regimes_validos = [r[0] for r in RegimeReajuste.choices]
                     regime = dados.get('regime_reajuste', '').strip().upper()
                     if regime not in regimes_validos:
