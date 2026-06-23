@@ -3,6 +3,12 @@
 import os
 import sys
 
+# Add MSYS2/GTK3 DLLs to PATH on Windows so WeasyPrint can find libgobject
+if sys.platform == 'win32':
+    _gtk_bin = r'C:\msys64\mingw64\bin'
+    if os.path.isdir(_gtk_bin) and _gtk_bin not in os.environ.get('PATH', ''):
+        os.environ['PATH'] = _gtk_bin + os.pathsep + os.environ.get('PATH', '')
+
 
 def main():
     """Run administrative tasks."""
