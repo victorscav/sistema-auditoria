@@ -11,8 +11,8 @@
 
 {% block extra_css %}
 <style>
-    .auto-filled { background-color: #e8f4fd !important; border-color: #90caf9 !important; }
-    .auto-filled-obs { background-color: #e8f4fd !important; border-color: #90caf9 !important; font-size: 0.8rem; }
+    .auto-filled { background-color: rgba(232,101,26,0.12) !important; border-color: #E8651A !important; }
+    .auto-filled-obs { background-color: rgba(232,101,26,0.08) !important; border-color: #E8651A !important; font-size: 0.8rem; }
 </style>
 {% endblock %}
 
@@ -147,7 +147,7 @@
 
             <!-- Total efetivo -->
             <div class="col-md-4">
-                <div class="border rounded p-2 text-center h-100 {% if total_contrib_display %}bg-light{% endif %}">
+                <div class="border rounded p-2 text-center h-100" {% if total_contrib_display %}style="background:#2a2a2a;"{% endif %}>
                     <small class="text-muted d-block">Total Efetivo de Contribuição</small>
                     {% if total_contrib_display %}
                     <span class="fw-bold fs-5 text-primary">{{ total_contrib_display }}</span>
@@ -433,7 +433,7 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold small mb-1">Teto remuneratório (subsídio do Prefeito)</label>
-                                <div class="form-control form-control-sm bg-light">
+                                <div class="form-control form-control-sm" style="background:#2a2a2a;">
                                     {% if subsidio_prefeito %}
                                     R$ {{ subsidio_prefeito }}
                                     {% else %}
@@ -644,7 +644,7 @@
                 <div class="collapse" id="tabelaRefInss">
                     <div class="table-responsive">
                         <table class="table table-bordered table-sm table-hover">
-                            <thead style="background:#1a3a5c; color:white;">
+                            <thead style="background:#E8651A; color:white;">
                                 <tr>
                                     <th>Ano</th>
                                     <th>Vigência</th>
@@ -1226,7 +1226,7 @@
                     </script>
                 </div>
                 {% if analise_automatica %}
-                <div style="font-size:0.88rem; line-height:1.7; background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px; padding:1rem;">
+                <div style="font-size:0.88rem; line-height:1.7; background:#1e1e1e; border:1px solid rgba(255,255,255,0.08); border-radius:6px; padding:1rem;">
                     {% for paragrafo in analise_automatica %}
                     <p class="mb-2{% if forloop.last %} mb-0{% endif %}">{{ paragrafo }}</p>
                     {% endfor %}
@@ -1746,6 +1746,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const vb = document.getElementById('valorBase');
     const ab = document.getElementById('anoBase');
     if (vb && ab && vb.value && ab.value) calcularReajuste(ANO_REF_CONTRACHEQUE);
+    if (selInstituto.value) selInstituto.dispatchEvent(new Event('change'));
 });
 </script>
 {% endblock %}

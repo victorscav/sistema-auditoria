@@ -177,6 +177,12 @@
 const dadosBeneficio = {{ dados_grafico_beneficio|safe }};
 const dadosConformidade = {{ dados_grafico_conformidade|safe }};
 
+const chartDefaults = {
+    color: '#9a9a9a',
+    borderColor: 'rgba(255,255,255,0.08)',
+};
+Chart.defaults.color = chartDefaults.color;
+
 new Chart(document.getElementById('graficoBeneficio'), {
     type: 'bar',
     data: {
@@ -184,14 +190,17 @@ new Chart(document.getElementById('graficoBeneficio'), {
         datasets: [{
             label: 'Processos',
             data: dadosBeneficio.values,
-            backgroundColor: ['#0d6efd','#198754','#fd7e14','#dc3545','#6610f2'],
+            backgroundColor: ['#E8651A','#c8541a','#ff8c47','#a04010','#ff6b2b'],
             borderRadius: 6,
         }]
     },
     options: {
         responsive: true,
         plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.06)' } },
+            x: { grid: { color: 'rgba(255,255,255,0.06)' } }
+        }
     }
 });
 
@@ -201,12 +210,14 @@ new Chart(document.getElementById('graficoConformidade'), {
         labels: dadosConformidade.labels,
         datasets: [{
             data: dadosConformidade.values,
-            backgroundColor: ['#198754','#fd7e14','#dc3545','#6c757d'],
+            backgroundColor: ['#198754','#E8651A','#dc3545','#6c757d'],
+            borderColor: '#252525',
+            borderWidth: 3,
         }]
     },
     options: {
         responsive: true,
-        plugins: { legend: { position: 'bottom' } }
+        plugins: { legend: { position: 'bottom', labels: { color: '#9a9a9a' } } }
     }
 });
 </script>

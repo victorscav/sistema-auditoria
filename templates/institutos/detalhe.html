@@ -8,92 +8,242 @@
 <li class="breadcrumb-item active">{{ instituto.nome }}</li>
 {% endblock %}
 
-{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h4 class="fw-bold mb-0">{{ instituto.nome }}</h4>
-        <small class="text-muted">{{ instituto.municipio }}/{{ instituto.estado }}
-            {% if instituto.cnpj %} · CNPJ: {{ instituto.cnpj }}{% endif %}
-        </small>
-    </div>
-    <div class="d-flex gap-2">
-        <a href="{% url 'institutos:nova_regra' instituto.pk %}" class="btn btn-success btn-sm">
-            <i class="bi bi-plus-lg me-1"></i>Nova Regra
-        </a>
-        <a href="{% url 'institutos:editar' instituto.pk %}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-pencil me-1"></i>Editar Instituto
-        </a>
-        <a href="{% url 'institutos:lista' %}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left me-1"></i>Voltar
-        </a>
-    </div>
-</div>
+{% block extra_css %}
+<style>
+    .inst-header {
+        background: linear-gradient(135deg, #1e1e1e 0%, #252525 100%);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px; padding: 1.5rem; margin-bottom: 1.5rem;
+    }
+    .inst-logo-box {
+        width: 80px; height: 80px; border-radius: 14px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.6rem; font-weight: 800; color: white;
+        background: linear-gradient(135deg, #E8651A, #c8541a);
+        overflow: hidden; border: 2px solid rgba(232,101,26,0.4);
+    }
+    .inst-logo-box img { width: 100%; height: 100%; object-fit: contain; }
+    .stat-pill {
+        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 10px; padding: 0.75rem 1rem; text-align: center; flex: 1;
+    }
+    .stat-pill .num { font-size: 1.4rem; font-weight: 700; color: #E8651A; }
+    .stat-pill .lbl { font-size: 0.72rem; color: #9a9a9a; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-item { padding: 0.6rem 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .info-item:last-child { border-bottom: none; }
+    .info-item .lbl { font-size: 0.75rem; color: #9a9a9a; margin-bottom: 2px; }
+    .nav-tabs-vsc .nav-link {
+        color: #9a9a9a; border: none; border-bottom: 2px solid transparent;
+        border-radius: 0; padding: 0.6rem 1.1rem; font-weight: 500;
+        background: transparent; transition: color 0.15s;
+    }
+    .nav-tabs-vsc .nav-link:hover { color: #f0f0f0; border-bottom-color: rgba(232,101,26,0.4); }
+    .nav-tabs-vsc .nav-link.active { color: #E8651A; border-bottom-color: #E8651A; }
+    .nav-tabs-vsc { border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 1.5rem; }
+    .table thead.thead-orange { background: #E8651A; color: white; }
+    .table thead.thead-blue { background: rgba(13,110,253,0.25); color: #93c5fd; }
+</style>
+{% endblock %}
 
-<!-- Info -->
-<div class="card card-stat mb-4">
-    <div class="card-body">
-        <div class="row g-3">
-            {% if instituto.lei_organica %}
-            <div class="col-md-4">
-                <small class="text-muted d-block">Lei Orgânica</small>
-                <span class="fw-semibold">{{ instituto.lei_organica }}</span>
-            </div>
+{% block content %}
+
+<!-- Header com logo -->
+<div class="inst-header">
+    <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="inst-logo-box">
+            {% if instituto.logo %}
+            <img src="{{ instituto.logo.url }}" alt="{{ instituto.nome }}">
+            {% else %}
+            {{ instituto.nome|slice:":2"|upper }}
             {% endif %}
-            <div class="col-md-2">
-                <small class="text-muted d-block">Status</small>
+        </div>
+        <div class="flex-grow-1">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <h4 class="fw-bold mb-0">{{ instituto.nome }}</h4>
                 {% if instituto.ativo %}
-                <span class="badge bg-success">Ativo</span>
+                <span class="badge-concluido badge">Ativo</span>
                 {% else %}
-                <span class="badge bg-secondary">Inativo</span>
+                <span class="badge-indeterminado badge">Inativo</span>
                 {% endif %}
-            </div>
-            <div class="col-md-3">
-                <small class="text-muted d-block">Reforma EC 103/2019</small>
                 {% if instituto.aderiu_ec103_2019 %}
-                <span class="badge bg-warning text-dark">
-                    <i class="bi bi-exclamation-triangle me-1"></i>Aderiu — normas anteriores revogadas
-                </span>
-                {% else %}
-                <span class="badge bg-info text-dark">Não aderiu — normas anteriores vigentes</span>
+                <span class="badge bg-warning text-dark" style="font-size:0.72rem;">EC 103/2019</span>
                 {% endif %}
             </div>
-            <div class="col-md-3">
-                <small class="text-muted d-block">Subsídio do Prefeito (teto RPPS)</small>
-                {% if instituto.subsidio_prefeito %}
-                <span class="fw-semibold text-primary">R$ {{ instituto.subsidio_prefeito }}</span>
-                {% else %}
-                <span class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Não informado</span>
-                {% endif %}
-            </div>
-            {% if instituto.observacoes %}
-            <div class="col-12">
-                <small class="text-muted d-block">Observações</small>
-                <span class="small">{{ instituto.observacoes }}</span>
-            </div>
-            {% endif %}
+            <small class="text-muted"><i class="bi bi-geo-alt me-1"></i>{{ instituto.municipio }} / {{ instituto.estado }}
+                {% if instituto.cnpj %} &nbsp;·&nbsp; CNPJ: {{ instituto.cnpj }}{% endif %}
+            </small>
+        </div>
+        <div class="d-flex gap-2 flex-shrink-0">
+            <a href="{% url 'institutos:nova_regra' instituto.pk %}" class="btn btn-success btn-sm">
+                <i class="bi bi-plus-lg me-1"></i>Nova Regra
+            </a>
+            <a href="{% url 'institutos:editar' instituto.pk %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-pencil me-1"></i>Editar
+            </a>
+            <a href="{% url 'institutos:lista' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="d-flex gap-2">
+        <div class="stat-pill">
+            <div class="num">{{ regras_municipais.count }}</div>
+            <div class="lbl">Regras Municipais</div>
+        </div>
+        <div class="stat-pill">
+            <div class="num">{{ regras_federais|length }}</div>
+            <div class="lbl">Normas Federais</div>
+        </div>
+        <div class="stat-pill">
+            <div class="num">{{ leis_municipais|length }}</div>
+            <div class="lbl">Leis de Reajuste</div>
+        </div>
+        <div class="stat-pill">
+            <div class="num">{{ instituto.processos.count }}</div>
+            <div class="lbl">Processos</div>
         </div>
     </div>
 </div>
 
-<!-- ── Regras Municipais ─────────────────────────────────────────────────── -->
-<h5 class="fw-semibold mb-3">
-    <i class="bi bi-building me-1"></i>Regras Municipais ({{ regras_municipais.count }})
-</h5>
+<!-- Abas -->
+<ul class="nav nav-tabs-vsc" id="instTab">
+    <li class="nav-item">
+        <a class="nav-link {% if not request.GET.aba or request.GET.aba == 'geral' %}active{% endif %}" href="?aba=geral">
+            <i class="bi bi-info-circle me-1"></i>Visão Geral
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if request.GET.aba == 'regras' %}active{% endif %}" href="?aba=regras">
+            <i class="bi bi-shield-check me-1"></i>Regras
+            <span style="background:rgba(232,101,26,0.2);color:#fb923c;border-radius:10px;padding:1px 7px;font-size:0.7rem;margin-left:4px;">{{ regras_municipais.count }}</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if request.GET.aba == 'leis' %}active{% endif %}" href="?aba=leis">
+            <i class="bi bi-file-earmark-text me-1"></i>Leis de Reajuste
+            <span style="background:rgba(25,135,84,0.2);color:#4ade80;border-radius:10px;padding:1px 7px;font-size:0.7rem;margin-left:4px;">{{ leis_municipais|length }}</span>
+        </a>
+    </li>
+</ul>
+
+<!-- ── ABA VISÃO GERAL ───────────────────────────────────────────────────── -->
+{% if not request.GET.aba or request.GET.aba == 'geral' %}
+<div class="row g-3">
+
+    <!-- Dados principais -->
+    <div class="col-md-6">
+        <div class="card card-stat h-100">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-building me-2 text-muted"></i>Dados do Instituto</h6>
+                {% if instituto.lei_organica %}
+                <div class="info-item">
+                    <div class="lbl">Lei Orgânica</div>
+                    <div class="fw-semibold">{{ instituto.lei_organica }}</div>
+                </div>
+                {% endif %}
+                {% if instituto.cnpj %}
+                <div class="info-item">
+                    <div class="lbl">CNPJ</div>
+                    <div>{{ instituto.cnpj }}</div>
+                </div>
+                {% endif %}
+                <div class="info-item">
+                    <div class="lbl">Subsídio do Prefeito (teto RPPS)</div>
+                    {% if instituto.subsidio_prefeito %}
+                    <div class="fw-semibold" style="color:#E8651A;">R$ {{ instituto.subsidio_prefeito }}</div>
+                    {% else %}
+                    <span class="text-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Não informado</span>
+                    {% endif %}
+                </div>
+                <div class="info-item">
+                    <div class="lbl">Reforma EC 103/2019</div>
+                    {% if instituto.aderiu_ec103_2019 %}
+                    <span class="badge bg-warning text-dark">Aderiu — normas anteriores revogadas</span>
+                    {% else %}
+                    <span class="badge bg-info text-dark">Não aderiu — normas anteriores vigentes</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Triênio -->
+    <div class="col-md-6">
+        <div class="card card-stat h-100">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-3"><i class="bi bi-clock-history me-2 text-muted"></i>Adicional por Tempo de Serviço (Triênio)</h6>
+                {% if instituto.norma_trienio or instituto.trienio_primeiro_percentual %}
+                <div class="info-item">
+                    <div class="lbl">Base Legal</div>
+                    <div>{{ instituto.norma_trienio|default:"—" }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="lbl">1º Triênio</div>
+                    <div class="fw-semibold">{{ instituto.trienio_primeiro_percentual|default:"—" }}{% if instituto.trienio_primeiro_percentual %}%{% endif %}</div>
+                </div>
+                <div class="info-item">
+                    <div class="lbl">Demais Triênios</div>
+                    <div class="fw-semibold">{{ instituto.trienio_demais_percentual|default:"—" }}{% if instituto.trienio_demais_percentual %}% cada{% endif %}</div>
+                </div>
+                <div class="info-item">
+                    <div class="lbl">Limite de Períodos</div>
+                    <div>{{ instituto.trienio_limite_periodos|default:"—" }}{% if instituto.trienio_limite_periodos %} triênios{% endif %}</div>
+                </div>
+                {% else %}
+                <div class="text-muted small fst-italic py-2">Nenhuma regra de triênio configurada.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Observações -->
+    {% if instituto.observacoes %}
+    <div class="col-12">
+        <div class="card card-stat">
+            <div class="card-body">
+                <h6 class="fw-semibold mb-2"><i class="bi bi-chat-text me-2 text-muted"></i>Observações</h6>
+                <p class="small mb-0" style="line-height:1.7;">{{ instituto.observacoes }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Alerta EC 103 -->
+    {% if instituto.aderiu_ec103_2019 %}
+    <div class="col-12">
+        <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+            <div>
+                <strong>Este instituto aderiu à Reforma da EC 103/2019.</strong>
+                As normas constitucionais anteriores (CF/88, EC 41/2003, EC 47/2005, EC 70/2012) foram substituídas pela legislação municipal própria.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endif %}
+
+<!-- ── ABA REGRAS ────────────────────────────────────────────────────────── -->
+{% if request.GET.aba == 'regras' %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h6 class="fw-semibold mb-0"><i class="bi bi-building me-1"></i>Regras Municipais</h6>
+    <a href="{% url 'institutos:nova_regra' instituto.pk %}" class="btn btn-success btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Nova Regra
+    </a>
+</div>
 
 {% if regras_municipais %}
-<div class="table-responsive mb-5">
-    <table class="table table-bordered table-hover bg-white">
-        <thead class="table-light">
+<div class="table-responsive mb-4">
+    <table class="table table-bordered table-hover">
+        <thead class="thead-orange">
             <tr>
-                <th>Tipo</th>
-                <th>Norma Base</th>
-                <th>Vigência</th>
-                <th>Idade (H/M)</th>
-                <th>Contrib. (H/M)</th>
-                <th>Teto (R$)</th>
-                <th>Reajuste</th>
-                <th>Status</th>
-                <th></th>
+                <th>Tipo</th><th>Norma Base</th><th>Vigência</th>
+                <th>Idade (H/M)</th><th>Contrib. (H/M)</th>
+                <th>Teto (R$)</th><th>Reajuste</th><th>Status</th><th></th>
             </tr>
         </thead>
         <tbody>
@@ -105,77 +255,34 @@
                     {{ regra.vigente_desde|date:"d/m/Y" }}
                     {% if regra.vigente_ate %} a {{ regra.vigente_ate|date:"d/m/Y" }}{% else %} — atual{% endif %}
                 </td>
-                <td class="small text-center">
-                    {{ regra.idade_minima_homem|default:"—" }} / {{ regra.idade_minima_mulher|default:"—" }}
-                </td>
-                <td class="small text-center">
-                    {{ regra.tempo_contribuicao_homem|default:"—" }} / {{ regra.tempo_contribuicao_mulher|default:"—" }}
-                </td>
-                <td class="small text-end">
-                    {% if regra.teto_remuneratorio %}R$ {{ regra.teto_remuneratorio }}{% else %}—{% endif %}
-                </td>
+                <td class="small text-center">{{ regra.idade_minima_homem|default:"—" }} / {{ regra.idade_minima_mulher|default:"—" }}</td>
+                <td class="small text-center">{{ regra.tempo_contribuicao_homem|default:"—" }} / {{ regra.tempo_contribuicao_mulher|default:"—" }}</td>
+                <td class="small text-end">{% if regra.teto_remuneratorio %}R$ {{ regra.teto_remuneratorio }}{% else %}—{% endif %}</td>
                 <td class="small">{{ regra.criterio_reajuste|default:"—" }}</td>
-                <td>
-                    {% if regra.ativa %}
-                    <span class="badge bg-success">Ativa</span>
-                    {% else %}
-                    <span class="badge bg-secondary">Inativa</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <a href="{% url 'institutos:editar_regra' regra.pk %}" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-pencil"></i>
-                    </a>
-                </td>
+                <td>{% if regra.ativa %}<span class="badge-concluido badge">Ativa</span>{% else %}<span class="badge-indeterminado badge">Inativa</span>{% endif %}</td>
+                <td><a href="{% url 'institutos:editar_regra' regra.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i></a></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 {% else %}
-<div class="text-center py-4 text-muted mb-5">
-    <p>Nenhuma regra municipal cadastrada para este instituto.</p>
-    <a href="{% url 'institutos:nova_regra' instituto.pk %}" class="btn btn-success btn-sm">
-        <i class="bi bi-plus-lg me-1"></i>Adicionar primeira regra
-    </a>
+<div class="text-center py-4 text-muted">
+    <p>Nenhuma regra municipal cadastrada.</p>
+    <a href="{% url 'institutos:nova_regra' instituto.pk %}" class="btn btn-success btn-sm"><i class="bi bi-plus-lg me-1"></i>Adicionar primeira regra</a>
 </div>
 {% endif %}
 
-<!-- ── Normas Federais / Constitucionais ────────────────────────────────── -->
-{% if instituto.aderiu_ec103_2019 %}
-<div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
-    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
-    <div>
-        <strong>Instituto aderiu à Reforma da EC 103/2019.</strong>
-        As normas constitucionais anteriores (CF/88, EC 41/2003, EC 47/2005, EC 70/2012) foram revogadas pela legislação municipal própria e não são exibidas.
-    </div>
-</div>
-{% else %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h5 class="fw-semibold mb-0">
-        <i class="bi bi-bank me-1 text-primary"></i>
-        Normas Federais / Constitucionais
-        <span class="badge bg-primary ms-2">{{ regras_federais|length }}</span>
-    </h5>
-    <small class="text-muted fst-italic">
-        Aplicáveis a todos os institutos que não aderiram à EC 103/2019 — lei maior paralela à legislação municipal
-    </small>
-</div>
-
-{% if regras_federais %}
+{% if not instituto.aderiu_ec103_2019 and regras_federais %}
+<h6 class="fw-semibold mb-3 mt-4"><i class="bi bi-bank me-1" style="color:#93c5fd;"></i>Normas Federais / Constitucionais</h6>
 <div class="table-responsive">
-    <table class="table table-bordered table-hover" style="background-color: #f0f4ff;">
-        <thead style="background-color: #dce6ff;">
+    <table class="table table-bordered table-hover">
+        <thead class="thead-blue">
             <tr>
-                <th>Tipo</th>
-                <th>Norma Base</th>
-                <th>Vigente Desde</th>
-                <th>Idade (H/M)</th>
-                <th>Contrib. (H/M)</th>
-                <th>Serv. Púb. / Cargo</th>
-                <th>Integralidade</th>
-                <th>Reajuste</th>
-                <th>Observações</th>
+                <th>Tipo</th><th>Norma Base</th><th>Vigente Desde</th>
+                <th>Idade (H/M)</th><th>Contrib. (H/M)</th>
+                <th>Serv. Púb. / Cargo</th><th>Integralidade</th>
+                <th>Reajuste</th><th>Observações</th>
             </tr>
         </thead>
         <tbody>
@@ -184,12 +291,8 @@
                 <td class="small fw-semibold">{{ regra.get_tipo_beneficio_display }}</td>
                 <td class="small">{{ regra.norma_base }}</td>
                 <td class="small text-nowrap">{{ regra.vigente_desde|date:"d/m/Y" }}</td>
-                <td class="small text-center">
-                    {{ regra.idade_minima_homem|default:"—" }} / {{ regra.idade_minima_mulher|default:"—" }}
-                </td>
-                <td class="small text-center">
-                    {{ regra.tempo_contribuicao_homem|default:"—" }} / {{ regra.tempo_contribuicao_mulher|default:"—" }}
-                </td>
+                <td class="small text-center">{{ regra.idade_minima_homem|default:"—" }} / {{ regra.idade_minima_mulher|default:"—" }}</td>
+                <td class="small text-center">{{ regra.tempo_contribuicao_homem|default:"—" }} / {{ regra.tempo_contribuicao_mulher|default:"—" }}</td>
                 <td class="small text-center">
                     {% if regra.tempo_servico_publico %}SP: {{ regra.tempo_servico_publico }}a{% else %}—{% endif %}
                     {% if regra.tempo_carreira %} / Car: {{ regra.tempo_carreira }}a{% endif %}
@@ -197,55 +300,39 @@
                 </td>
                 <td class="small text-center">
                     {% if regra.integralidade is None %}—
-                    {% elif regra.integralidade %}
-                    <span class="badge bg-success">Integral</span>
-                    {% else %}
-                    <span class="badge bg-warning text-dark">Proporcional</span>
-                    {% endif %}
+                    {% elif regra.integralidade %}<span class="badge bg-success">Integral</span>
+                    {% else %}<span class="badge bg-warning text-dark">Proporcional</span>{% endif %}
                 </td>
                 <td class="small">{{ regra.criterio_reajuste|default:"—" }}</td>
-                <td class="small text-muted" style="max-width:260px; white-space:normal;">
-                    {% if regra.observacoes %}
-                    <span title="{{ regra.observacoes }}">
-                        {{ regra.observacoes|truncatewords:18 }}
-                    </span>
-                    {% else %}—{% endif %}
-                </td>
+                <td class="small text-muted" style="max-width:220px;white-space:normal;">{{ regra.observacoes|truncatewords:15|default:"—" }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 {% endif %}
+
 {% endif %}
 
-<!-- ── Leis Municipais de Reajuste ───────────────────────────────────────── -->
-<div class="d-flex justify-content-between align-items-center mt-5 mb-3">
-    <h5 class="fw-semibold mb-0">
-        <i class="bi bi-file-earmark-text me-1 text-success"></i>
-        Leis Municipais de Reajuste
-        <span class="badge bg-success ms-2">{{ leis_municipais|length }}</span>
-    </h5>
+<!-- ── ABA LEIS DE REAJUSTE ──────────────────────────────────────────────── -->
+{% if request.GET.aba == 'leis' %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h6 class="fw-semibold mb-0"><i class="bi bi-file-earmark-text me-1"></i>Leis Municipais de Reajuste</h6>
     <a href="{% url 'institutos:nova_lei' instituto.pk %}" class="btn btn-success btn-sm">
         <i class="bi bi-plus-lg me-1"></i>Nova Lei
     </a>
 </div>
 
 {% if leis_municipais %}
-<div class="table-responsive mb-4">
-    <table class="table table-bordered table-hover bg-white">
-        <thead class="table-light">
+<div class="table-responsive">
+    <table class="table table-bordered table-hover">
+        <thead class="thead-orange">
             <tr>
-                <th>Número</th>
-                <th>Ementa</th>
-                <th>Publicação</th>
-                <th>Vigência</th>
-                <th class="text-end">% Reajuste</th>
-                <th>Índice</th>
-                <th class="text-center">Inativos</th>
-                <th class="text-center">Pensões</th>
-                <th class="text-center">PDF</th>
-                <th></th>
+                <th>Número</th><th>Ementa</th><th>Publicação</th><th>Vigência</th>
+                <th class="text-end">% Reajuste</th><th>Índice</th>
+                <th class="text-center">Inativos</th><th class="text-center">Pensões</th>
+                <th class="text-center">PDF</th><th></th>
             </tr>
         </thead>
         <tbody>
@@ -255,39 +342,26 @@
                 <td class="small">{{ lei.descricao|default:"—" }}</td>
                 <td class="small text-nowrap">{{ lei.data_publicacao|date:"d/m/Y" }}</td>
                 <td class="small text-nowrap fw-semibold">{{ lei.data_vigencia|date:"d/m/Y" }}</td>
-                <td class="small text-end fw-bold text-success">{{ lei.percentual }}%</td>
+                <td class="small text-end fw-bold" style="color:#4ade80;">{{ lei.percentual }}%</td>
                 <td class="small">{{ lei.base_indice|default:"—" }}</td>
+                <td class="text-center">{% if lei.aplica_inativos %}<span class="badge-concluido badge">Sim</span>{% else %}<span class="badge-indeterminado badge">Não</span>{% endif %}</td>
+                <td class="text-center">{% if lei.aplica_pensoes %}<span class="badge-concluido badge">Sim</span>{% else %}<span class="badge-indeterminado badge">Não</span>{% endif %}</td>
                 <td class="text-center">
-                    {% if lei.aplica_inativos %}<span class="badge bg-success">Sim</span>
-                    {% else %}<span class="badge bg-secondary">Não</span>{% endif %}
+                    {% if lei.arquivo %}<a href="{{ lei.arquivo.url }}" target="_blank" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-pdf"></i></a>{% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
-                <td class="text-center">
-                    {% if lei.aplica_pensoes %}<span class="badge bg-success">Sim</span>
-                    {% else %}<span class="badge bg-secondary">Não</span>{% endif %}
-                </td>
-                <td class="text-center">
-                    {% if lei.arquivo %}
-                    <a href="{{ lei.arquivo.url }}" target="_blank" class="btn btn-outline-danger btn-sm" title="Ver PDF">
-                        <i class="bi bi-file-pdf"></i>
-                    </a>
-                    {% else %}<span class="text-muted">—</span>{% endif %}
-                </td>
-                <td>
-                    <a href="{% url 'institutos:editar_lei' lei.pk %}" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-pencil"></i>
-                    </a>
-                </td>
+                <td><a href="{% url 'institutos:editar_lei' lei.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i></a></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 {% else %}
-<div class="text-center py-4 text-muted mb-4">
-    <p>Nenhuma lei de reajuste cadastrada para este instituto.</p>
-    <a href="{% url 'institutos:nova_lei' instituto.pk %}" class="btn btn-success btn-sm">
-        <i class="bi bi-plus-lg me-1"></i>Cadastrar primeira lei
-    </a>
+<div class="text-center py-4 text-muted">
+    <p>Nenhuma lei de reajuste cadastrada.</p>
+    <a href="{% url 'institutos:nova_lei' instituto.pk %}" class="btn btn-success btn-sm"><i class="bi bi-plus-lg me-1"></i>Cadastrar primeira lei</a>
 </div>
 {% endif %}
+
+{% endif %}
+
 {% endblock %}

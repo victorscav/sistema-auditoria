@@ -47,6 +47,8 @@ def novo_instituto(request):
             subsidio_prefeito=_dec(request.POST.get('subsidio_prefeito')),
             observacoes=request.POST.get('observacoes', '').strip(),
         )
+        if 'logo' in request.FILES:
+            instituto.logo = request.FILES['logo']
         instituto.save()
         messages.success(request, f'Instituto "{instituto.nome}" criado com sucesso.')
         return redirect('institutos:detalhe', pk=instituto.pk)
@@ -71,6 +73,13 @@ def editar_instituto(request, pk):
         instituto.aderiu_ec103_2019 = request.POST.get('aderiu_ec103_2019') == 'on'
         instituto.subsidio_prefeito = _dec(request.POST.get('subsidio_prefeito'))
         instituto.observacoes = request.POST.get('observacoes', '').strip()
+        if 'logo' in request.FILES:
+            if instituto.logo:
+                instituto.logo.delete(save=False)
+            instituto.logo = request.FILES['logo']
+        elif request.POST.get('remover_logo') == '1' and instituto.logo:
+            instituto.logo.delete(save=False)
+            instituto.logo = None
         instituto.save()
         messages.success(request, 'Instituto atualizado.')
         return redirect('institutos:detalhe', pk=instituto.pk)

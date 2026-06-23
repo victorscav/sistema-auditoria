@@ -21,7 +21,6 @@ lib64/
 *.log
 local_settings.py
 db.sqlite3-journal
-media/
 
 # Virtualenv
 env/

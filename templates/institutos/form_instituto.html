@@ -19,9 +19,32 @@
 
 <div class="card card-stat" style="max-width: 700px;">
     <div class="card-body">
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="row g-3">
+                <!-- Logo -->
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Logo do Instituto</label>
+                    <div class="d-flex align-items-center gap-3">
+                        <div id="logo-preview" style="width:72px;height:72px;border-radius:12px;overflow:hidden;background:#1e1e1e;border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            {% if instituto.logo %}
+                            <img src="{{ instituto.logo.url }}" style="width:100%;height:100%;object-fit:contain;" id="logo-img">
+                            {% else %}
+                            <i class="bi bi-bank text-muted" style="font-size:1.8rem;" id="logo-placeholder"></i>
+                            {% endif %}
+                        </div>
+                        <div class="flex-grow-1">
+                            <input type="file" name="logo" id="logo-input" class="form-control form-control-sm" accept="image/*">
+                            <small class="text-muted">PNG, JPG ou SVG. Recomendado: fundo transparente.</small>
+                            {% if instituto.logo %}
+                            <div class="form-check mt-1">
+                                <input class="form-check-input" type="checkbox" name="remover_logo" value="1" id="remover_logo">
+                                <label class="form-check-label small text-danger" for="remover_logo">Remover logo atual</label>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
                 <div class="col-12">
                     <label class="form-label fw-semibold">Nome <span class="text-danger">*</span></label>
                     <input type="text" name="nome" class="form-control" required
@@ -90,4 +113,19 @@
         </form>
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+document.getElementById('logo-input').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        document.getElementById('logo-preview').innerHTML =
+            `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:contain;">`;
+    };
+    reader.readAsDataURL(file);
+});
+</script>
+{% endblock %}
 {% endblock %}

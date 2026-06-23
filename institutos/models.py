@@ -65,6 +65,7 @@ class Instituto(models.Model):
         help_text='Número máximo de triênios passíveis de acumulação.',
     )
 
+    logo = models.ImageField(upload_to='institutos/logos/', blank=True, null=True, verbose_name='Logo')
     observacoes = models.TextField(blank=True, verbose_name='Observações')
 
     def percentual_trienio_para(self, n_trienios):
